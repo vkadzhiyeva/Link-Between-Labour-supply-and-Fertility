@@ -1,0 +1,2672 @@
+---
+title: "Labour-Fertility -- ECON422:Assignment 2 
+output: html_notebook
+---
+
+# Question 1
+### State cases in which conditional on other covariates, the sex composition of the first two children might affect labor supply variables. Are these stories credible or second-order?
+First of all this paper (Angrist and Evans, 1998) is trying to find a link between labour supply and fertility (childbearing). There are assumptions that childbearing keeps women from developing their careers, and the study of such links should help us to understand various social events such as improving well-being of children, studying effects of post world war women labour supply increase etc.  
+Since we cannot directly observe the childbearing effects we must find some estimates that could help us to capture the increase in fertility (or decrease). The given paper introduces an IV for the childbearing - sex composition of the first two children.    
+Sex composition of the first two children can affect the labour supply variables through a secondary link - fertility.  
+Since sex composition is related to increase in fertility - therefore it can show the link between fertility and labour supply. Various studies have found negative correlation between labour supply and fertility(Gronau, 1988;Sanders Korenman and David Neumark, 1992;Claudia Goldin, 1995; etc)  
+However there is skepticism regarding the causal interpretaion between fertility and labour supply since there are strong theoretical reasons to believe fertility and labour supply are jointly determined (Schultz,1981;Goldin,1990)  
+To see the effect consider effect of sex composition on fertility. Paren’ts of same-sex siblings are significantly more likely to have another child (Charles F. Westoff et al., 1963). Since sex mix is randomly assigned same sex indicator is a good potential instrument. Another example of that by Yoram Ben-Porath and Finis Welch (1976) shows in 1970 56% with same sex had third child, and only 51% with sex mix had third child. Paren’ts derive utility from the number of children and their quality (Becker and Gregg H. Lewis,1973;Becker and Nigel Tomes, 1976; Rosenzweig and Wolpin, 1980a). Therefore sex mix determines child quality per se. In Table 3(Angrist and Evans,1998) we can see that the impact of the sex of the firstborn isn’t big. The data presented shows that when a woman has same sex two children she is more likely to have a third child compared to mixed sex of the first two children.  
+  
+We can safely assume that the same sex is randomly assigned (which means reduced form regressions of fertility and labour supply outcomes on the same sex instrument will have causal interpretation) since when we compare demographic characteristics of people with same sex and mixed sex of the first two children (Table 4 - Angrisst and Evans, 1998) the differences aren’t significantly different from 0 and the magnitude of differences is very small.  
+
+# Question 2
+### What are the economic channels through which fertility and household labor supply are simultaneously determined and probably depend on the same unobservable.
+papers often regress hours of work on child-status (fertility) variables   
+while economic demographers discuss models where fertility is regressed on wages and other labour force variables.  
+Therefore labour economics are often very dangerously using such variables.  
+it is worth to note that fertility variables cannot be dependent and exogenous at the same time therefore labour economics can often fail to find the actual causal interpretation. (Handbook of Labor Economics: Mark R. Montgomery and James Trussel, 1986 p.205)  
+
+## Packages Installation and Loading
+```{r echo=TRUE}
+#install.packages(“AER”)
+#install.packages(“Hmisc”)
+#install.packages(“ggplot2”)
+#install.packages("MatchIt")
+library(Hmisc)
+library(ggplot2)
+library(AER)
+library(MatchIt)
+```
+## Data Loading and Preparation
+### Why?
+Before starting to answer the next questions, we want to prepare the data by limiting the age of mothers 21-35 as given in the Home Assignment description. We will not be restricting the father's age since it is not specified and the links between the families aren't clear with the given sample variables information (many descriptions for the variables are missing)  
+
+### Changes
+Females age 21-25 restriction  
+Create treatment variable - existence of third child  
+Create total hours of work in a year - since this could be a valuable variable for indicating labour supply effect. We derive it multiplying weeks worked in a year by hours worked per week(we assume that it is average effect since we have no clarification).  
+Create female and male labour force participation variable - this is an indicator if they have worked at all in the past year therefore participated in the labour force.  
+Twins for second birth indicator - this is created by matching the age quarters of second and third child - if they are equal they were born at the same time --twins.  
+Same Sex indicator - created to indicate whether the sex of first child is equal to the sex of the second child.  
+Father indicator - since some information for dad is missing it is safe to assume that since this dataset was matched based on the household information and not the actual fertility information that the father either doesn't live with the child/mother or is unavailable.  
+two boys /two girls indicator - used to indicate whether the sex of the first two children was two boys or two girls.  
+  
+```{r echo=TRUE}
+#get the data agemoms between 21-35 according to the paper and the assignment
+view <- read.csv("~/Desktop/view.php.csv")
+sample=subset(view,data$agem>20)
+sample=subset(view,data$agem<36)
+try=sample
+
+#DATAPREPARAATION
+#3rd child indicator
+try$treatment=ifelse(try$ageq3rd>=0,1, 0)
+try$treatment=ifelse(is.na(try$treatment),0,1)
+#total hours worked
+try$hrstotalm=try$hoursm*try$weeksm
+try$hrstotald=try$hoursd*try$weeksd
+#labour participation
+try$participatem=ifelse(try$hrstotalm>0,1, 0)
+try$participated=ifelse(try$hrstotald>0,1, 0)
+#twins indicator by quarters (nothing else is available)
+try$twins2=ifelse(try$ageq2nd==try$ageq3rd,1,0)
+try$twins2[is.na(try$twins2)]=0
+#same sex indicator of first two kids
+try$samesex=ifelse(try$sexk==try$sex2nd,1,0)
+#dad indicator
+try$dadind=ifelse(try$aged>=0,1,0)
+try$dadind[is.na(try$dadind)]=0
+#sex composition two boys
+try$twoboys=ifelse(try$sexk==0 & try$sex2nd==0,1,0)
+#sex composition two girls
+try$twogirls=ifelse(try$sexk==1 & try$sex2nd==1,1,0)
+#converting age of second kid in quarters to years
+try$agek2nd=try$ageq2nd/4
+```
+## Data Discovery
+Before beginning to look at the questions using data we want to explore the given data. since we do not have full dictionary to the variables we can check some that we think will be applicable to our analysis.  
+- spanishd - shows values between 1-5 doesn’t make sense what it indicates therefore we will not use it.  
+- poverty - shows values between 1-7 that are consistent with the levels of income therefore we can use it as an indicator of magnitude of poverty (1 - poor; 7 - not poor)  
+after few manipulations of family income we recode negative and 0 values to 1 (because they do not make sense). we also try to use log of the variable however it becomes a bit difficult to interpret so for simplicity we keep it as it is but recoded.  
+  
+we also look at the correlation between the treatment and other child indicator variables. Having Same sex kids shows positive correlation with third child . Having two girls positively correlates with third child . Sex of the first child barely correlates with the existence of third child as well as the sex of the 2nd child on it's own. This is consistent with the findings in the paper.  
+  
+checking correlation matrix for key variables :female labour participation is negatively correlated with presence of father, higher number of children, presence of third child, and same sex kids. family income is negatively correlated with the higher number of children, presence of third child, and same sex kids. You can check the rest in the tables given, but they show that the following variables may be nicely used together.  
+doing same for fathers shows similar results. you can check the detailed output in the Appendix Data Discovery Results.  It corresponds to the code below
+
+```{r echo=TRUE}
+#checking other variables if they can work?
+summary(try$spanishd)
+#between 1-5 0 doesn’t make sense
+summary(try$poverty)
+#between 1-7 – checking for correlation with family income shows that it reflects the magnitude of the income therefore can be used in the models
+check1=subset(try,poverty==1)
+check2=subset(try,poverty==2)
+check3=subset(try,poverty==3)
+check4=subset(try,poverty==4)
+check5=subset(try,poverty==5)
+check6=subset(try,poverty==6)
+check7=subset(try,poverty==7)
+
+  summary(check1$faminc)
+  summary(check2$faminc)
+  summary(check3$faminc)
+  summary(check4$faminc)
+  summary(check5$faminc)
+  summary(check6$faminc)
+  summary(check7$faminc)
+#therefore can use poverty variable
+
+#Checking other variables
+  summary(try$faminc)
+#negative at times – therefore lets use 
+#check skewness of income values since they are continuous
+  hist(try$faminc)
+#clearly it is skewed to the left therefore it is better to log it. Since the values cant be 0 for log normalize it to 1. It is better for the normalization of the data. 
+try$faminc=ifelse(try$faminc<=0,1,try$faminc)
+#check if it worked
+  summary(try$faminc)
+try$lnfaminc=log(try$faminc)
+        summary(try$participated)
+        summary(try$participatem)
+        summary(try$hoursm)
+        summary(try$hoursd)
+        summary(try$weeksm)
+        summary(try$weeksd)
+        summary(try$hrstotalm)
+        summary(try$hrstotald)
+        summary(try$agem)
+        summary(try$aged)
+        summary(try$gradem)
+        summary(try$graded)
+        summary(try$dadind)
+        summary(try$kidcount)
+        summary(try$sexk)
+        summary(try$treatment)
+        summary(try$samesex)
+        
+#to see the iv variables possibilities
+check=subset(try, samesex>=0)
+        x=subset(check,select=c(sexk,samesex,sex2nd,twoboys,twogirls,twins2))
+        cor(x,check$treatment)
+#EXPLANATION
+        
+        #to see which ones to use lets check variance covariance matrix
+        #females
+y=subset(check, select=c(participatem,faminc,hoursm,weeksm,hrstotalm,lnfaminc))
+x=subset(check, select=c(agem,gradem,dadind,kidcount,sexk, treatment, samesex,poverty))
+        cor(x,y)
+        
+#lnfamily income seems to be a very hard interpretable measure and also having less effect therefore it wouldn’t be used here
+        
+        #males
+y=subset(check, select=c(participated,faminc,hoursd,weeksd,hrstotald,lnfaminc))
+x=subset(check, select=c(aged,graded,kidcount,sexk, treatment, samesex,poverty))
+        cor(x,y)
+        
+        #give description
+check=subset(try,dadind==1)
+y=subset(check, select=c(participated,faminc,hoursd,weeksd,hrstotald))
+x=subset(check, select=c(aged,graded, kidcount,sexk))
+        cor(x,y)
+        
+        #give description
+        
+        #dropping hoursm as a dependent variable since it doesn’t really reflect work*
+        
+```
+# Question 3
+### In a standard OLS setting, regress labor supply variables (participation, earnings, hours of work) of married women and married men on fertility and other covariates like the ages of the mother and father, their education and the father’s income. What is the treatment? Explain why these estimates are biased and try to predict the direction of the bias.
+The estimates are biased because the birth of third child is most likely correlated with other non observed variables. this results in often over exaggeration of the bias since the third child birth most likely also channels other effects we cannot separate the effect of the treatment (third child) on the earnings therefore it has additional biased effect.   
+  
+All the new variables (derived) are explained in the ## Data Loading and Preparation 
+  
+these regressions use 4 different dependent variables - participation, family income, hours worked in a year) - for female and male separately  
+Note: we are not going to look at weeks worked in a year as it is not clear how this estimator was obtained from the given dictionary therefore it is hard to separate its effects.  
+  
+The regressors for females are - age, years of education, indication of father, presence of third chid, poverty magnitude  
+The regressors for males are - age, years of education, presence of third child, age of mother, years of education for mother, and poverty magnitude. (here we include the characteristics of the mother as well as it could determine the labour supply. for example if mother was educated for a lot of years then father might be not as insighted to work more as she could do that)  
+Below is the description of the output. To see the detailed output refer to Appendix Question 3  
+- Females   
+
+(participation on age, years of education, father indicator, treatment, poverty magnitude)  
+
+Interpretation: all variables are statistically significant and presence of father and treatment variable seems to decrease the participation for females which is consistent with the theory and observations and papers.  
+effect of third child on participation - decreases by 8.9%  
+***
+(family income on age, years of education, father indicator, treatment, poverty magnitude)  
+  
+Interpretation : Although the variables are all statistically significant, it is curious why presence of the third child increases family income by 1634 dollars on average. As expected as poverty decreases the family income increases by 3550 dollars.   
+effect of third child on family income - increases by 1634 dollars  
+***
+(hours worked in a year total on age, years of education, father indicator, treatment, poverty magnitude)  
+
+Interpretation: All variables are statistically significant. It is interesting to note that here the higher number of years in school decreases hours worked in a year on average by 5 hours(which isn’t that much, less than a day). Presence of a father decreases number of hours worked by 657 hours (that’s 27 days - more than a business month) and presence of a third child decreases number of hours worked by 163 hours (that’s about 6 days - a week). **it is also unclear how the weeks worked a year have been calculated so it is hard to fully interpret this without a full understanding of the data dictionary**  
+effect of third child on hours worked in a year - decreases by 163 hours  
+***
+- Males  
+***
+(participation on age, years of education, father indicator, age of mother, years of education of mother, treatment, poverty magnitude)  
+  
+Interpretation: as expected (from the evidence given in paper) the presence of a third child affects father labour participation positively. all variables except mothers years of education are statistically significant(this might be due to the fact that fathers participation in the labour isn’t affected by mothers education rates)(but it is also worth noting that this sample was collected from 1980s therefore it reflects past social norms - more conservative outlook on the family dynamics - therefore father was always encouraged to work more).  
+effect of third child on participation - increases participation by 1.2%  
+***
+(family income on age, years of education, father indicator, age of mother, years of education of mother, treatment, poverty magnitude)  
+  
+Interpretation : as expected, the age and the years of education of mother does positively affect the family earnings and as opposed to our findings above is statistically significant. lower poverty magnitude shows higher family income (which is consistent with our findings)  
+effect of third child on family income - increases by 1407 dollars  
+***
+(hours worked in a year total on age, years of education, father indicator, age of mother, years of education of mother, treatment, poverty magnitude)  
+  
+Interpretation: All variables are statistically significant. It is interesting that the increase in fathers age decreases hours worked in a year by 6 hours (about a day). The presence of a third child however increases the hours workd by 88 hours (thats about 3 days)  
+effect of third child on hours worked in a year - increases by 88 hours  
+***
+***
+***
+Note: After the assessment it is possible that the years of education variable is endogenous with fertility. For example mother can have less years of education because of child. therefore it must be dropped from the future IV calculations.  
+
+```{r echo=TRUE}
+ #FEMALES
+        #regress labour participation of moms on non fertility related variables and treatment (to see effect and show it is biased) but don’t include IVs yet
+        lm=lm (participatem~agem+gradem+dadind+treatment+poverty,data=try)
+        
+        #regress family income on rest
+        lm2=lm (faminc~agem+gradem+dadind+treatment+poverty,data=try)
+        
+        #regress total hours on the rest - for efficiency to see total working - somewhat a participation measure
+        lm3=lm (hrstotalm~agem+gradem+dadind+treatment+poverty,data=try)
+        
+        #MALE
+        #regress labour participation of dads on kildcount,sexfirst,agemom,agekid,grademom
+        lmd=lm (participated~aged+graded+treatment+agem+gradem+poverty, data=try)
+        
+        #regress family income on rest
+        lmd2=lm (faminc~aged+graded+treatment+agem+gradem+poverty, data=try)
+        
+        #regress total hours on the rest - for efficiency to see total working - somewhat a participation measure
+        lmd3=lm (hrstotald~aged+graded+treatment+agem+gradem+poverty, data=try)
+        
+        #after assessing the variables the educational variable is potentially edogenous since it may be partly determined by fertility – therefore it should  be ddropped from the future IV assessments
+        summary(lm)
+        summary(lm2)
+        summary(lm3)
+        summary(lmd)
+        summary(lmd2)
+        summary(lmd3)
+```
+# Question 4
+### The treatment we consider is the birth of a third child and its effect on labor market variables for both wife and husband of these families. Explain carefully what the treatment parameter is. The instrument we are going to use first is the sex composition of the first two children. Explain why the instrument might affect the treatment probability.
+
+The treatment is the fertility of the family since we want to see the effect of the said fertility on the labour supply. Therefore we separate the samples by non fertile and fertile families and see what effect the fertility would have on the labour supply.  This is observational data, but if it was experimental we could have assigned the fertility or non fertility to the families and see how it would affect the labour supply. the sex composition of the first two children might affect the treatment probability because it is more likely that parent’s with same sex kids would have another kid. This is because they prefer to have mixed sex kids. This was proven through a survey and through various studies. It can be explained using utility models or through the data itself. Here we can see the proof of such link existence through tables given in the paper or the data discovery in this document above. To get more details on the studies please see Question 1 answer and Data Discovery section.  
+  
+# Question 5
+### Explain why we restrict the sample to families of two children or more. How does this sample selection affect the parameters to estimate? You will compare systematic differences between the excluded sample and the selected sample in particular with respect to labor market variables. Comment.
+Since our instrumental variables use the sex composition for the first two children we must have at least two children in the data to do the analysis without having missing variables. This is the technical explanation to this. There is strong empirical evidence outside the given paper and in the paper (although the surveys suggest otherwise) that the sex of the first child doesn’t impact the fertility of the household.  the sex mix relationship and childbearing is confirmed through several works and data including in this document as well as the paper given.  Since this paper is focused on the IV indicators of the sex composition it would be wise to restrict the sample to 2 or more children to see the effects of the IV in order to estimate causality between fertility and childbearing.  Therefore we need to look at the 2 children or more sample in order not to deal with missing values in the regressions and not miss important data.  
+comparing sample to mothers with less than 2 kids to sample with 2 or more kids in terms of the outcome labour supply variables ( participation, family income, hours worked in a week, weeks worked in a year, hours worked in a year total) we see that the means are much higher for less than 2 kids. this is because the first child does not have a big impact on the labour variables. that is why we are interested in the 2 or more kids samples. these have higher impact on the labour estimates in order for us to see the link between fertility and labour supply.  
+```{r echo=TRUE}
+
+sample=subset(try, kidcount<2)
+y=subset(sample, select=c(participatem,faminc,hoursm,weeksm,hrstotalm))
+sample2=subset(try, kidcount>=2)
+z=subset(sample2, select=c(participatem,faminc,hoursm,weeksm,hrstotalm))
+summary(y)
+summary(z)
+
+```
+
+** In the rest of the problem, we restrict the sample to households with 2 and more children and look at the impact of the presence of a third child on labor market behavior for single women, married women and men. **
+# Question 6
+### We start by assessing the strength of the instrument by estimating the propensity score as a function of age of mother and father, their education and income of the father. What is the treatment variable? Use linear models, Probit and Logit for the propensity score using the sex composition of the first two children.
+Propensity score  
+the treatment variable chosen here is the indicator of a third child.  
+"The propensity score theorem states that if potential outcomes are independent of treatment status conditional on a multivariate covariate vector, Xi, then potential outcomes are independent of treatment status conditional on a scalar function of covariates, the propensity score, defined as p(Xi) = E[Di|Xi]." (Mostly Harmless Economics)  
+
+The full propensity score application requires matching on fitted values or using weights, however since this questions asks us to only estimate the propensity score that is what we will do. There are various methods on matching and several of them are described in Propensity Scores: A Practical Introduction Using R (Antonio Olmos and Priyalatha Govindasamy, 2015). As seen in this paper the distribution after matching of the propensity scores massively improves. So keep that in mind for the future questions when we will see that distribution is not perfectly aligned. Propensity score is often used in cases where random experiment cannot be accomplished and we cannot control the assignment of the control variables. (real life experimental data or quasi experimental data)  
+the treatment variable in this case is the presence of third child (shows fertility).  
+
+To calculate the propensity scores we therefore regress treatment on the X matrix (covariant that are exogenous) (note that it is unclear how it is expected for us to use sex composition of the children as it is not the treatment variable. the propensity score is only calculated using the regressor and dependant variables based on the book and various papers including the Propensity Scores: A Practical Introduction Using R (Antonio Olmos and Priyalatha Govindasamy, 2015))    
+
+Now lets look at interpretation of the the outputs of the models.  To see detailed output refer to Appendix Question 6
+***
+***
+***
+**Linear Models: Female**
+***
+**(treatment on age, dad indicator, poverty magnitude) ** 
+  
+Interpretation : all variables are statistically significant. Lower poverty correlates with higher chances of having third child. The most impactful is the father indicator - it increases the chances of having a third child by 12.9% which makes sense because a woman most likely will have another child if she has a better support system including having a father for the child. being one year older also increases chances of having third child by 2.6% this might be due to the fact that the mothers have already had two children and there has to be a reasonable gap in between births, or the fact that mothers have better base when becoming older.  
+***
+**Linear Models: Male**
+***
+**(treatment on age, mother age, poverty magnitude)**  
+
+Interpretation: All estimates are statistically significant. However age of the father barely increases chances of having a third child. less poverty increases chances of third child by 6% and higher age of mother icnreases chances of child by 2.8% (consistent with the above finding)
+
+Note : that the linear and logit/probit models cannot be directly compared since they use different estimates. mother and father models cant be compared either since those are two different "samples
+***
+**Probit Model: Females**
+propensity score equals to the G((da)+(dB)'X) where G is cdf of N(0,1) - therefore interpretation of the estimates is complicated
+***
+**(treatment on age, dad indicator, poverty magnitude)**
+Interpretation - all estimates are statistically significant . since the interpretation of the coefficients here isn’t straightforward we will just use the predicted probability. Age of mother and Presence of a father increases predicted probability of a third child. Decrease in poverty(lower poverty) level increases the predicted probability of a third child. 
+***
+**Probit Model: Males**
+***
+**(treatment on age, mother age, poverty magnitude)**
+
+Interpretation : here certain observation were deleted but this shouldn’t be a worry since the deleted observations due to the missing of the father estimate. all estimates are significant. and similarly to linear estimation poverty decrease has effect of increased probability of a third child. increase in age of father and mother lead to increased probability of third child.
+***
+**Logit Model : Females**
+propensity score equals to the exp(K)/[1+exp(K)] where K=(da)+(dB)'X where d=delta - interpretation of coefficients is still complicated.
+***
+**(treatment on age, dad indicator, poverty magnitude)**
+Interpretation: all variables are significant. similarly to probit they have similar effects (negative/positive, not the magnitude). The AIC values are mostly similar though the probit is just slightly smaller. (AIC value roughly equals the number of parameters minus the likelihood of the overall model to describe the propensity score – Therefore the smaller the AIC value the better the model)
+***
+**Logit Model : Males**
+***
+**(treatment on age, mother age, poverty magnitude)**  
+  
+Interpretation : All variables are significant , have similar effects(negative/positive not the magnitude) to probit model. however the AIC value for probit model is slightly lower -- that model is better fitted to describe the propensity score.(AIC value roughly equals the number of parameters minus the likelihood of the overall model – Therefore the smaller the AIC value the better the model)  
+***
+***
+***
+```{r echo=TRUE}
+#now restrict to two children or more
+        try2=subset(try, kidcount>=2)
+        
+        #lLINEAR
+        #FEMALES
+        #try different models – propensity score =E(D|X) – estimating treatment variable conditional on the covariants
+        #treatment is the birth of a third child. the likeliness to have that is measured with same sex 
+        plm=lm(treatment~ agem+ dadind+poverty,data=try2)
+        
+        #MALES
+        pld=lm(treatment~aged+poverty+agem,data=try2)
+        
+        #PROBIT
+        #FEMALES
+        #treatment is the birth of a third child. the likeliness to have that is measured with same sex 
+        pprobm=glm(treatment~agem+dadind+poverty,family=binomial(link="probit"),data=try2)
+        
+        #MALES - repeat
+        pprobd=glm(treatment~ aged+poverty+agem,family=binomial(link="probit"),data=try2)
+        
+        #LOGIT - repeat
+        #FEMALES
+        #treatment is the birth of a third child. the likeliness to have that is measured with same sex 
+        plogglm=glm(treatment~ agem+dadind+poverty,family=binomial(link="logit"),data=try2)
+        
+        #MALES -repeat
+        ploggld=glm(treatment~ aged+poverty+agem,family=binomial(link="logit"),data=try2)
+        
+        # the summaries
+        summary(plm)
+        summary(pld)
+        summary(probm)
+        summary(probd)
+        summary(plogglm)
+        summary(ploggld)
+```
+
+# Question 7
+### Predict the estimated propensity score and compare its distribution function in the treatment and control groups [Hint: use the command kdensity to graphically plot the density of the propensity scores in the two cases]. Comment. Is the common support assumption reasonably established?
+for all the distributions note that there are more cases of having no third child which makes sense.
+To see the detailed distributions refer to Appendix Question 7
+
+**Propensity Score Using Linear Model for Females**
+Interpretation - propensity score for those with third child and no third child is similar, but the population with a third child is more normally distributed where those without third child is more left skewed .
+
+**Propensity Score Using Linear Model for Males**
+Interpretation - both left skewed but those without third child is more. however both have very similar distributions
+
+**Propensity Score Using Probit Model for Males**
+Interpretation - those without third child very skewed to the left and those with third child is not that extreme.
+
+**Propensity Score Using Probit Model for Females**
+Interpretation - both have very similar distributions
+
+**Propensity Score Using Logit Model for Females**
+Interpretation -  both very similar distributions
+
+**Propensity Score Using Logit Model for Males**
+Interpretation - both very similar distributions
+```{r echo=TRUE}
+#predicting values
+fix=subset(try2, dadind==1)
+        try2$prediction=predict(plm, type="response")
+        fix$predictiond=predict(pld, type="response")
+        
+        fix$predictionprobd=predict(pprobd, type="response")
+        try2$predictionprobm=predict(pprobm, type="response")
+        try2$predictionlogm=predict(plogglm, type="response")
+        fix$predictionlogd=predict(ploggld, type="response")
+
+        histbackback(split(try2$prediction, try2$treatment), main = "Propensity Score Using Linear Model for Females",xlab=c("No Third Child","Third Child"))
+        
+        histbackback(split(fix$predictiond, fix$treatment),main="Propensity Score Using Linear Model for Males",xlab=c("No Third Child","Third Child"))
+        
+        histbackback(split(fix$predictionprobd, fix$treatment),main="Propensity Score Using Probit Model for Males",xlab=c("No Third Child","Third Child"))
+        
+        histbackback(split(try2$predictionprobm, try2$treatment),main="Propensity Score Using Probit Model for Females",xlab=c("No Third Child","Third Child"))
+        
+        histbackback(split(try2$predictionlogm, try2$treatment),main="Propensity Score Using Logit Model for Females",xlab=c("No Third Child","Third Child"))
+        
+        histbackback(split(fix$predictionlogd, fix$treatment),main="Propensity Score Using Logit Model for Males",xlab=c("No Third Child","Third Child"))
+        
+```
+note that matching will improve the matching distributions since it would improve the propensity score - however since it is not required here we wont do that. note that it could be done with matchit function.
+#Question 8
+### Compute the Wald estimator not using other covariates and compare to the OLS estimates. Compare to your priors of Question 2.
+Wald estimator - Using Same Sex as IV and Birth of Third Child as Treatment
+using the wald estimator formula - [E(Y|z=1)-E(Y|z=0)]/[E(D|z=1)-E(D|z=0)]
+we compute the means of the dependant variable(Y) and treatment (D) given the instrumental variable (Z) 
+In this case it depends which one we choose. For IV I chose Same Sex, for Treatment Birth of Third Child, and for Dependent variable we will look at family income, hours worked total in a year for female and man and participation indicator for female and male.
+
+We find that although they have same signs (negative/positive effect) and somewhat similar but they are not the same. It is obviously that OLS estimator seems to either overpredict or underpredicted the value.
+***
+***
+***
+**dependent variable - family income**
+
+when we compare the wald estimator to the OLS value using the family income as the predictor we see that the OLS predictor is more exaggerated. The effect of third child on the family income therefore is that it reduces the income by 1000 dollars
+***
+**Females - Paricipation Dependant Variable**
+
+This case shows wald estimator and OLS being very close. More than two children increase participation rates by 11.2%
+***
+**Females - Hours in A Year Total Dependant Variable**
+
+IN this case however the OLS seems to underestimate the effect. the effect of third child decreases hours worked total by 238 hours
+***
+**Males - Participation Dependant Variable**
+
+THis one has opposite effect but not very big - it is likely that the treatment doesn’t have much impact on the participation for males (which will be confirmed many times). OLS tends to show that it has negative effect on the participation which isn’t the case (exaggeration). the presence of third child increases participation for male by .7%
+***
+**Males - Hours in A Year Total Dependant Variable**
+
+It is clear that the estimation is very biased for OLS here and doesn’t properly catch the effect. Although the effect in terms of hours is very small and likely is insignificant in the bigger picture. but the actual effect is positive on the hours. the effect of third child increases hours worked in a year by 42 hours.
+***
+***
+***
+```{r echo=TRUE}
+#wald estimator
+        #creating two different sets to follow the formula and calculate it manually
+        #USING SAMESEX AS IV
+        check=subset(try2, samesex==1)
+        check2=subset(try2, samesex=0)
+        
+        #wald formula with y=faminc
+        wald1=(mean(check$faminc)-mean(check2$faminc))/(mean(check$treatment)-mean(check2$treatment))
+        wald1
+        #comparing to OLS coefficient 
+        lm(faminc~treatment, data=try2)
+        
+        #FEMALES
+        #wald with y=participatem
+        wald2=(mean(check$participatem)-mean(check2$participatem))/(mean(check$treatment)-mean(check2$treatment))
+        wald2
+        #comparing to OLS 
+        lm(participatem~treatment, data=try2)
+        
+        #wald with y=hrstotalm
+        wald4=(mean(check$hrstotalm)-mean(check2$hrstotalm))/(mean(check$treatment)-mean(check2$treatment))
+        wald4
+        #comparing to OLS 
+        lm(hrstotalm~treatment, data=try2)
+        
+        #FATHERS
+        #need to ignore the ommited variables since R takes them into account when calculating means
+        checka=subset(check,dadind==1)
+        check2a=subset(check2,dadind==1)
+        #wald with y=participated
+        wald5=(mean(checka$participated)-mean(check2a$participated))/(mean(checka$treatment)-mean(check2a$treatment))
+        wald5
+        #comparing to OLS 
+        lm(participated~treatment, data=try2)
+        
+        #wald with y=hrstotald
+        wald6=(mean(checka$hrstotald)-mean(check2a$hrstotald))/(mean(checka$treatment)-mean(check2a$treatment))
+        wald6
+        #comparing to OLS 
+        lm(hrstotald~treatment, data=try2)
+```
+# Question 9
+### Estimate by 2SLS models with different covariates and different instruments, for instance the sex of first kid interacted with sex composition.
+the 2sls is somewhat similar to Wald estimator since 2sls dummy instruments is a combination of  all wald estimators. it is important to note that the generality is in the assumption that the IV variable is a dummy , which isn’t the case IV can be continious.though those IV instruments can usually be groupe ed without loss of information for efficiency therefore making dummy variables. with the Wald estimators it is possible to create multiple of them using same causal effect and to come up with single estimate we try to most efficiantly fit these estimates through a line fo the group means.  
+the 2sls estimator can be written as :
+
+Гhat2sls=[sum{ViVi'}]^(-1)sum{ViYi}
+where Г=[a'p]' is the corresponding coefficient vector
+
+the key for IV is to be uncorrelated with the errors (same sex shouldn’t be correlated with anything else as it is randomly assigned) and correlated with the treatment (same sex is correlated with the birth of third child for more details refer to above examples)
+it is important to note that the 2sls estimators are consistent
+it is important to note that while the second stage ols estimation is correct - it is not appropriate for the residuals therefore we cant use any statistics that use the residuals. it is harder to employ the actual residuals therefore we first by hand calculate the first and second stage to demonstrate the process and demonstrate the prediction of the variable and later on we use the package AER in R that can estimate 2sls using proper procedure. on the more detailed algorithm please consult R Documentation.
+
+In particular we are interested in the regressions
+**(1)**
+Yi=a0'**W**i+a1S1i+a2S2i+BiXi+ei where **W** is matrix of covariants, S1 is the sex of first child and S2 is sex of second child and Xi is the estimator of the first stage predictor for IV (regressing treatment on samesex, sex of first and second child)
+
+**(2)**
+Yi=a0'**W**i+a1S1i+BiXi+ei where **W** is matrix of covariants, S1 is the sex of first child and Xi is the estimator of the first stage predictor for IV (regressing treatment on two girls and two boys indicator,and sex of first child) Note that we loose the sex of second child from the regression since it could be linearly correlated.
+
+#### first stage  
+estmate IV  
+the models are run for moms and father separately (see above the reasons for that) and for mothers we use X matrix as age, father indicator, poverty magnitude; for fathers we use age, age of mothers, poverty magnitude.  
+  
+first stage of this procedure regresses treatment on the instruments and covariates (X matrix). see above for the clarification on chosen treatment.  
+
+```{r echo=TRUE}
+        #1stage -for mom regress treatment on instrument and covariates
+        #lets test samesex, second, firstborn sex
+        s1=lm(treatment~samesex+sex2nd+sexk+agem+dadind+poverty, data=try2)
+        
+        #test sex first, twoboys,twogirls
+        s1c=lm(treatment~twoboys+twogirls+sexk+agem+dadind+poverty, data=try2)
+        
+        #predictions
+        try2$treatpredict=predict(s1, type = "response")
+        try2$treatpredict3=predict(s1c, type="response")
+        
+        #repeat for DADS
+        #need to redo first stage to reflect new X matrix
+        #lets test samesex, second, firstborn sex
+        s1d=lm(treatment~samesex+sex2nd+sexk+aged+agem+poverty, data=try2)
+
+        #test sex first, twoboys,twogirls
+        s1dc=lm(treatment~twoboys+twogirls+sexk+aged+agem+poverty, data=try2)
+        
+        #predictions
+        #to properly predict - only match on where dads exist to avoid confusion with the missing values
+        fixsample=subset(try2,dadind==1)
+        fixsample$treatpredictd=predict(s1d, type = "response")
+        fixsample$treatpredict3d=predict(s1dc, type="response")
+
+        
+```
+
+#### Second Stage  
+the second stage uses the predicted value of the treatment from the first stage in the equation with a certain chosen dependant variable and X matrix.  
+**Results:**   - to see detailed results output refer to Appendix Question 9
+***
+***
+***
+**Females**  
+***
+***
+**(participation on predicted IV (1) and the other covariates listed above)**  
+**Using participation and 1 case of IV**  
+  
+Interpretation: most of the variables except sex of first child are significant (at least at a=.1%). We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It decreases participation rate by 8.2 %. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+**(participation on predicted IV (2) and the other covariates listed above)**  
+**Using participation and 2 case of IV**  
+   
+Interpretation: most of the variables except sex of first child are significant. We are particularly interestedin the impact of the IV (the birth of third child) on the selected dependent variable. It decreases participation rate by 7.2 %. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+**(family income on predicted IV (1) and the other covariates listed above)**  
+**Using family income and 1 case of IV**  
+  
+Interpretation: most of the variables except sex of second child are significant. We are particularly interestedin the impact of the IV (the birth of third child) on the selected dependent variable. It increases family income by 1306 dollars. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+**(family income on predicted IV (2) and the other covariates listed above)**  
+**Using family income and 2 case of IV**  
+  
+Interpretation: most of the variables are significant. We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It increases family income by 1370 dollars. The other statistics cannot be used since the residuals aren’t reliable.  
+***  
+**(hours worked in a year on predicted IV (1) and the other covariates listed above)**  
+**Using hours worked in a year and 1 case of IV**  
+  
+Interpretation: most of the variables are significant. We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It decreases hours worked in a year by 164 hours on average. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+**(hours worked in a year on predicted IV (2) and the other covariates listed above)**  
+**Using hours worked in a year and 2 case of IV**  
+  
+Interpretation: most of the variables are significant. We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It decreases hours worked in a year by 144 hours on average. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+***
+**MALES**  
+***
+***
+**(participation on predicted IV (1) and the other covariates listed above)**  
+  
+Interpretation: most of the variables are significant except sex of first child. We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It increases participation rate by about 2% on average. The other statistics cannot be used since the residuals aren’t reliable.  
+***  
+**(participation on predicted IV (2) and the other covariates listed above)**  
+  
+Interpretation: most of the variables are significant except sex of first child (at least at a=5%). We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It increases participation rate by about 1% on average. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+**(family income on predicted IV (1) and the other covariates listed above)**  
+  
+Interpretation: most of the variables are significant except sex of second child (at least at a=1%). We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It increases family income by about 1200 dollars on average. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+**(family income on predicted IV (2) and the other covariates listed above)**  
+  
+Interpretation: all of the variables are significant  (at least at a=1%). We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It increases family income by about 1277 dollars on average. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+**(hours worked in a year total on predicted IV (1) and the other covariates listed above)**  
+  
+Interpretation: all of the variables are significant except sex of second child (at least at a=5%). We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It increases hours worked in a year by about 118 hours on average. The other statistics cannot be used since the residuals aren’t reliable.  
+***  
+**(hours worked in a year total on predicted IV (2) and the other covariates listed above)**  
+
+Interpretation: all of the variables are significant (at least at a=5%). We are particularly interested in the impact of the IV (the birth of third child) on the selected dependent variable. It increases hours worked in a year by about 114 hours on average. The other statistics cannot be used since the residuals aren’t reliable.  
+***
+***
+***
+```{r echo=TRUE}
+        #females
+        #y-participation
+        s2=lm(participatem~treatpredict+agem+dadind+poverty+sexk+sex2nd, data=try2)
+        s2c=lm(participatem~treatpredict3+agem+dadind+poverty+sexk, data=try2)
+
+        #now use different labour estimate - family income
+        incs2=lm(faminc~treatpredict+agem+dadind+poverty+sexk+sex2nd, data=try2)
+        incs2c=lm(faminc~treatpredict3+agem+dadind+poverty+sexk, data=try2)
+        
+        #another labour estimate - hours worked total -mom
+        hrs2=lm(hrstotalm~treatpredict+agem+dadind+poverty+sexk+sex2nd, data=try2)
+        hrs2c=lm(hrstotalm~treatpredict3+agem+dadind+poverty+sexk, data=try2)
+  
+        #DADS
+        #y-participation
+        s2d=lm(participated~treatpredictd+aged+agem+poverty+sexk+sex2nd, data=fixsample)
+        s2dc=lm(participated~treatpredict3d+aged+agem+poverty+sexk, data=fixsample)
+
+        #now use different labour estimate - family income
+        incs2d=lm(faminc~treatpredictd+aged+agem+poverty+sexk+sex2nd, data=fixsample)
+        incs2dc=lm(faminc~treatpredict3d+aged+agem+poverty+sexk, data=fixsample)
+        
+        #another labour estimate - hours worked total -mom
+        hrs2d=lm(hrstotald~treatpredictd+aged+agem+poverty+sexk+sex2nd, data=fixsample)
+        hrs2dc=lm(hrstotald~treatpredict3d+aged+agem+poverty+sexk, data=fixsample)
+        
+#show the final estimates
+summary(s2)
+summary(s2c)
+
+summary(incs2)
+summary(incs2c)
+
+summary(hrs2)
+summary(hrs2c)
+
+#males
+summary(s2d)
+summary(s2dc)
+
+summary(incs2d)
+summary(incs2dc)
+
+summary(hrs2d)
+summary(hrs2dc)
+
+```
+# Question 10  
+### When there is more than one instrument, test the overidentifying restrictions. What does this tell you about the parameters that you estimated.  
+Overidentifying Restrictions - this is defined as "Constant-effects models with more instruments than endogenous regressors are said to be over-identified. Because there are more instruments than needed to identify the parameters of interest, these models impose a set of restrictions that can be evaluated as part of a process of specification testing" in Mostly Harmless Econometrics Section 4.2.2  
+  
+Therefore to check that we need to keep the explanatory variables less than IV  
+  
+We can also check the strength of the particular estimators (Weak Estimator- estimates how much explanatory power the particular IV has on the X variable) as well as apply Durbin Wu Hausman test evaluates consistency of the OLS models compared to the model that was ran. The null Hypothesis is that OLS is consistent. 
+Only look at IV 2 but in the code I ran both models to see the differences between manual and computer package iv 2sls regression 
+***
+***
+***
+**females**  
+***
+***
+
+***
+
+IV 1 (samesex) – family income on sex first, sex second, age mother, poverty, father indicator, treatment
+
+Residual standard error: 8795 on 479347 degrees of freedom
+Multiple R-Squared: 0.5101,	Adjusted R-squared: 0.5101 
+Wald test: 8.3e+04 on 6 and 479347 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are very similar. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV 2 (two boys two girls indicator) – family income on sex first, age mother, poverty, father indicator, treatment
+Residual standard error: 8796 on 479348 degrees of freedom
+Multiple R-Squared:  0.51,	Adjusted R-squared:  0.51 
+Wald test: 9.959e+04 on 5 and 479348 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are very similar. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case the p value is big therefore at least one of the instruments isn’t valid
+
+IV 1 – participation on the same variables as above
+
+
+Residual standard error: 0.4812 on 479347 degrees of freedom
+Multiple R-Squared: 0.06145,	Adjusted R-squared: 0.06144 
+Wald test:  4871 on 6 and 479347 DF,  p-value: < 2.2e-16 
+
+Comparing to Manual 2SLS – estimates are very similar. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV 2 – participation on same as above
+
+Residual standard error: 0.4812 on 479348 degrees of freedom
+Multiple R-Squared: 0.06154,	Adjusted R-squared: 0.06153 
+Wald test:  5844 on 5 and 479348 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are very similar. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . p value is small – reject null at a=.01 therefore all instruments are valid
+
+IV 1 hours total in a year on all variables above
+Residual standard error: 814.7 on 479347 degrees of freedom
+Multiple R-Squared: 0.09545,	Adjusted R-squared: 0.09544 
+Wald test:  8264 on 6 and 479347 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are very similar. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV 2 hours total in a year on all variables above
+
+Residual standard error: 814.4 on 479348 degrees of freedom
+Multiple R-Squared: 0.09602,	Adjusted R-squared: 0.09601 
+Wald test:  9921 on 5 and 479348 DF,  p-value: < 2.2e-16 
+
+
+Comparing to Manual 2SLS – estimates are same. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case p value is small and we reject null at  a=.01 hence all insturments are valid.
+
+MALES
+
+IV 1 family income on treatment, age , age of mother, poverty, sex of first kid, sex of second kid.
+
+Residual standard error: 9169 on 406258 degrees of freedom
+Multiple R-Squared: 0.4281,	Adjusted R-squared: 0.4281 
+Wald test: 5.066e+04 on 6 and 406258 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are same. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case number of IV=treatment therefore no need for test
+
+IV 2 family income on treatment, age , age of mother, poverty, sex of first kid
+
+Residual standard error: 9170 on 406259 degrees of freedom
+Multiple R-Squared: 0.428,	Adjusted R-squared: 0.428 
+Wald test: 6.078e+04 on 5 and 406259 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are same. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case number p value is big therefore at least one of the iv isn’t valid
+IV 1 – participation of father on all variables mentioned above
+
+Residual standard error: 0.1535 on 406258 degrees of freedom
+Multiple R-Squared: 0.07891,	Adjusted R-squared: 0.07889 
+Wald test:  5893 on 6 and 406258 DF,  p-value: < 2.2e-16 
+
+Comparing to Manual 2SLS – estimates are same. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case number of IV=treatment therefore no need for test
+
+IV 2 father participation on all listed variables
+
+Residual standard error: 0.1535 on 406259 degrees of freedom
+Multiple R-Squared: 0.07961,	Adjusted R-squared: 0.0796 
+Wald test:  7076 on 5 and 406259 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are same. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case p value is small enough therefore all instruments are valid
+IV 1 - Hours worked in a year by dad on all listed variables
+
+
+Residual standard error: 684.6 on 406258 degrees of freedom
+Multiple R-Squared: 0.09392,	Adjusted R-squared: 0.0939 
+Wald test:  7130 on 6 and 406258 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are same. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case p value is small and we reject null at a=.1 therefore need for instrumental variables.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case number of IV=treatment therefore no need for test
+
+IV 2 Hours worked in a year by dad on all listed variables
+
+Residual standard error: 684.5 on 406259 degrees of freedom
+Multiple R-Squared: 0.09411,	Adjusted R-squared: 0.0941 
+Wald test:  8558 on 5 and 406259 DF,  p-value: < 2.2e-16 
+Comparing to Manual 2SLS – estimates are same. And both significant
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.   
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case p value is small and we reject null at a=.1 therefore need for instrumental variables.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case p value is big therefore we don’t reject null and at least on of the instruments not valid.
+
+```{r echo=TRUE}
+ #10
+        #overidentifying restrictions
+        #testing IV relevance – use ivdfljf
+        #compare 2
+  #testing females      
+        #y=faminc
+        ivtest=ivreg(faminc~agem+poverty+dadind+sexk+sex2nd+treatment|agem+poverty+dadind+sexk+sex2nd+samesex, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+        ivtest2=ivreg(faminc~agem+poverty+dadind+sexk+treatment|agem+poverty+dadind+sexk+twoboys+twogirls, data=try2) 
+        summary(ivtest2, diagnostics = TRUE)
+        
+                #y=participate
+        ivtest=ivreg(participatem~agem+poverty+dadind+sexk+sex2nd+treatment|agem+poverty+dadind+sexk+sex2nd+samesex, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+        ivtest2=ivreg(participatem~agem+poverty+dadind+sexk+treatment|agem+poverty+dadind+sexk+twoboys+twogirls, data=try2) 
+        summary(ivtest2, diagnostics = TRUE)
+        
+                        #y=total hours worked
+        ivtest=ivreg(hrstotalm~agem+poverty+dadind+sexk+sex2nd+treatment|agem+poverty+dadind+sexk+sex2nd+samesex, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+        ivtest2=ivreg(hrstotalm~agem+poverty+dadind+sexk+treatment|agem+poverty+dadind+sexk+twoboys+twogirls, data=try2) 
+        summary(ivtest2, diagnostics = TRUE)
+                               
+#testing males
+              #y=faminc
+        ivtest=ivreg(faminc~aged+agem+poverty+sexk+sex2nd+treatment|aged+agem+poverty+sexk+sex2nd+samesex, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+        ivtest2=ivreg(faminc~aged+agem+poverty+sexk+treatment|aged+agem+poverty+sexk+twoboys+twogirls, data=try2) 
+        summary(ivtest2, diagnostics = TRUE)
+ 
+        
+                      #y=participate
+        ivtest=ivreg(participated~aged+agem+poverty+sexk+sex2nd+treatment|aged+agem+poverty+sexk+sex2nd+samesex, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+        ivtest2=ivreg(participated~aged+agem+poverty+sexk+treatment|aged+agem+poverty+sexk+twoboys+twogirls, data=try2) 
+        summary(ivtest2, diagnostics = TRUE)
+
+        
+                       #y=total hours worked in a year
+        ivtest=ivreg(hrstotald~aged+agem+poverty+sexk+sex2nd+treatment|aged+agem+poverty+sexk+sex2nd+samesex, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+        ivtest2=ivreg(hrstotald~aged+agem+poverty+sexk+treatment|aged+agem+poverty+sexk+twoboys+twogirls, data=try2) 
+        summary(ivtest2, diagnostics = TRUE)
+   
+
+```
+
+# Question 11
+### We now use the instrument that uses that the second birth is a twin birth. Repeat the previous estimation procedure. Why is it that the two sets of parameters are different?
+although we could apply the manual two stage procedures, remember that the estimation of the residuals is in correct using that procedure therefore we use the AER package as in previous examples.
+twin birth was calculated at the beginning. refer to data preparation
+
+the effect is different in the end because twins at second birth reflect effect of more children o labour supply than people would have had in other case. The birth doubles so if that wouldnd happen the couple might have chosen to have only one children if they had a choice. therefore they do not identify same average effect.
+Wald estimation
+Using family income as dependent variable
+Wald=-138
+OLS=-1739
+Wald(samesex)=-1004
+Interpretation -  OLS is again over exaggerated. And smaller effect than same sex because it carries effect of age of the children on the income most likely
+-	Females
+Using participation as dependent variable
+Wald=-.07
+OLS=--.09
+Wald(samesex)=-.12
+Interpretation -  OLS is again over here. And less than same sex because it carries effect of age of the children on the income most likely
+
+
+Using hours worked total by mother as dependent variable
+Wald=-129
+OLS=--157
+Wald(samesex) = -238
+Interpretation -  OLS is again over exaggerated. And less than same sex because it carries effect of age of the children on the income most likely
+
+- males  
+Using participation of father as dependent variable
+Wald=.004
+OLS=--.01
+Wald(samesex) = .006
+Interpretation -  OLS is again over exaggerated. And less than same sex because it carries effect of age of the children on the income most likely
+
+
+Using hours worked total by father as dependent variable
+Wald=14
+OLS=40
+Wald(samesex) = 42
+Interpretation -  OLS is again over exaggerated. And less than same sex because it carries effect of age of the children on the income most likely
+
+```{r}
+#wald estimator
+        #creating two different sets to follow the formula and calculate it manually
+        #USING SAMESEX AS IV
+        check=subset(try2, twins2==1)
+        check2=subset(try2, twins2=0)
+        
+        #wald formula with y=faminc
+        wald1=(mean(check$faminc)-mean(check2$faminc))/(mean(check$treatment)-mean(check2$treatment))
+        wald1
+        #comparing to OLS coefficient 
+        lm(faminc~treatment, data=try2)
+        
+        #FEMALES
+        #wald with y=participatem
+        wald2=(mean(check$participatem)-mean(check2$participatem))/(mean(check$treatment)-mean(check2$treatment))
+        wald2
+        #comparing to OLS 
+        lm(participatem~treatment, data=try2)
+        
+        #wald with y=hrstotalm
+        wald4=(mean(check$hrstotalm)-mean(check2$hrstotalm))/(mean(check$treatment)-mean(check2$treatment))
+        wald4
+        #comparing to OLS 
+        lm(hrstotalm~treatment, data=try2)
+        
+        #FATHERS
+        #need to ignore the ommited variables since R takes them into account when calculating means
+        checka=subset(check,dadind==1)
+        check2a=subset(check2,dadind==1)
+        #wald with y=participated
+        wald5=(mean(checka$participated)-mean(check2a$participated))/(mean(checka$treatment)-mean(check2a$treatment))
+        wald5
+        #comparing to OLS 
+        lm(participated~treatment, data=try2)
+        
+        #wald with y=hrstotald
+        wald6=(mean(checka$hrstotald)-mean(check2a$hrstotald))/(mean(checka$treatment)-mean(check2a$treatment))
+        wald6
+        #comparing to OLS 
+        lm(hrstotald~treatment, data=try2)
+```
+we see that smaller effect of twins instrument is the ages of children due to twinning since they are older (the third child for twinning compared to third child who isn’t a twin)
+to check that we use the following regression in second stage to adjust for age differences -
+Yi=a0'Wi+aS1+a2S2+a3K1+a4K2+BiXi+ei where K1 and K2 is age for both children
+Bi now captures effect of age of third child. therefore we assume that Bi=B0+B1K3i
+Therefore we can transform this equation to be
+Yi=a0'Wi+aS1+a2S2+a3K1+a4K2+B0Xi+B1(K3iXi)+ei
+therefore by doing this we can adjust the effects and make them very similar to each other. we will demonstrate the process 
+use the computer program since the estimates are the same to calculate the effect but have correct residuals and assess the strength of the iv easier and efficiently.
+-	Female 
+IV – twins second birth. Family income on age of mother, poverty, father indicator, sex of first and second child and treatment
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -15010.322    112.520 -133.401  < 2e-16 ***
+agem           376.631      6.754   55.762  < 2e-16 ***
+poverty       3867.479     15.196  254.509  < 2e-16 ***
+dadind        1969.230     49.305   39.940  < 2e-16 ***
+sexk            64.729     25.483    2.540   0.0111 *  
+sex2nd          20.796     25.483    0.816   0.4145    
+treatment     1805.874    220.353    8.195  2.5e-16 ***
+
+Residual standard error: 8803 on 479347 degrees of freedom
+Multiple R-Squared: 0.5093,	Adjusted R-squared: 0.5093 
+Wald test: 8.288e+04 on 6 and 479347 DF,  p-value: < 2.2e-16 
+
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child are significant at least at a=.05. bith of third child increases the family income by 1805 dollars on average (higher effect than 2SLS using same sex IV. This is probably due to the fact that it carries effect of age first two kids in it 
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+IV – twins second birth. Participation of mothers on age of mother, poverty, father indicator, sex of first and second child and treatment
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.2696860  0.0061518  43.839  < 2e-16 ***
+agem         0.0079092  0.0003693  21.419  < 2e-16 ***
+poverty      0.0526046  0.0008308  63.318  < 2e-16 ***
+dadind      -0.2601319  0.0026956 -96.501  < 2e-16 ***
+sexk         0.0008468  0.0013932   0.608  0.54331    
+sex2nd       0.0038008  0.0013932   2.728  0.00637 ** 
+treatment   -0.0538607  0.0120473  -4.471  7.8e-06 ***
+
+Residual standard error: 0.4813 on 479347 degrees of freedom
+Multiple R-Squared: 0.06129,	Adjusted R-squared: 0.06128 
+Wald test:  4872 on 6 and 479347 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of first child are significant at least at a=.05. bith of third child decreases the participation by 5.4% on average (lesser effect than same sex IV since it decreases participation by 8.3%). This is probably due to the fact that it carries effect of age first two kids in it and the effect it has on the participation.
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV – twins second birth. Hours worked in year of mothers on age of mother, poverty, father indicator, sex of first and second child and treatment
+Coefficients:
+             Estimate Std. Error  t value Pr(>|t|)    
+(Intercept)   26.2577    10.4080    2.523  0.01164 *  
+agem          20.6828     0.6248   33.105  < 2e-16 ***
+poverty      110.0339     1.4056   78.282  < 2e-16 ***
+dadind      -614.2012     4.5607 -134.673  < 2e-16 ***
+sexk           4.8072     2.3571    2.039  0.04141 *  
+sex2nd         6.9819     2.3572    2.962  0.00306 ** 
+treatment    -92.0875    20.3825   -4.518 6.24e-06 ***
+
+Residual standard error: 814.2 on 479347 degrees of freedom
+Multiple R-Squared: 0.09651,	Adjusted R-squared: 0.0965 
+Wald test:  8275 on 6 and 479347 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child are significant at least at a=.05. bith of third child decreases the hours in a year worked by 92 hours on average (lower effect than using same sex as IV) This is probably due to the fact that it carries effect of age first two kids in it
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV – twins second birth. Family income in year on age of mother, age of father, poverty, sex of first and second child and treatment
+
+Coefficients:
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -18635.371    124.169 -150.080  < 2e-16 ***
+aged           126.730      3.929   32.256  < 2e-16 ***
+agem           373.171      7.734   48.252  < 2e-16 ***
+poverty       4141.857     16.904  245.017  < 2e-16 ***
+sexk            78.116     28.871    2.706  0.00682 ** 
+sex2nd          27.801     28.862    0.963  0.33542    
+treatment     1646.256    248.520    6.624 3.49e-11 ***
+
+Residual standard error: 9176 on 406258 degrees of freedom
+Multiple R-Squared: 0.4272,	Adjusted R-squared: 0.4272 
+Wald test: 5.058e+04 on 6 and 406258 DF,  p-value: < 2.2e-16 
+
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child are significant at least at a=.05. bith of third child increases family income by 1646 dollars on average (higher effect than using same sex as IV) This is probably due to the fact that it carries effect of age first two kids in it
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+IV – twins second birth. Father participation on mothers on age of mother, age of father, poverty, sex of first and second child and treatment
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  8.918e-01  2.076e-03 429.616  < 2e-16 ***
+aged        -3.277e-03  6.568e-05 -49.898  < 2e-16 ***
+agem         1.155e-03  1.293e-04   8.931  < 2e-16 ***
+poverty      2.510e-02  2.826e-04  88.802  < 2e-16 ***
+sexk         1.090e-04  4.827e-04   0.226  0.82128    
+sex2nd      -1.389e-03  4.825e-04  -2.880  0.00398 ** 
+treatment    1.304e-02  4.155e-03   3.137  0.00170 ** 
+
+Residual standard error: 0.1534 on 406258 degrees of freedom
+Multiple R-Squared: 0.08019,	Adjusted R-squared: 0.08017 
+Wald test:  5902 on 6 and 406258 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child are significant at least at a=.05. bith of third child increases participation by 1% on average (lesser effect than using same sex as IV) This is probably due to the fact that it carries effect of age first two kids in it
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+IV – twins second birth. Hours worked in a year by father on mothers on age of mother, age of father, poverty, sex of first and second child and treatment
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 1305.4146     9.2527 141.085   <2e-16 ***
+aged          -8.6467     0.2928 -29.535   <2e-16 ***
+agem          11.8648     0.5763  20.588   <2e-16 ***
+poverty      120.5011     1.2597  95.662   <2e-16 ***
+sexk           4.9243     2.1514   2.289   0.0221 *  
+sex2nd        -0.6554     2.1507  -0.305   0.7606    
+treatment     25.2415    18.5188   1.363   0.1729    
+
+Residual standard error: 683.8 on 406258 degrees of freedom
+Multiple R-Squared: 0.09603,	Adjusted R-squared: 0.09602 
+Wald test:  7146 on 6 and 406258 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child and treatment are significant at least at a=.05. bith of third child increases hours worked in a year by 25 hours on average (lesser effect than using same sex as IV) This is probably due to the fact that it carries effect of age first two kids in it
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+```{r}
+#females   
+        #y=faminc
+        ivtest=ivreg(faminc~agem+poverty+dadind+sexk+sex2nd+treatment|agem+poverty+dadind+sexk+sex2nd+twins2, data=try2) 
+  summary(ivtest, diagnostics = TRUE)
+                    #y=participate
+        ivtest=ivreg(participatem~agem+poverty+dadind+sexk+sex2nd+treatment|agem+poverty+dadind+sexk+sex2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+                        #y=total hours worked
+        ivtest=ivreg(hrstotalm~agem+poverty+dadind+sexk+sex2nd+treatment|agem+poverty+dadind+sexk+sex2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+                                 
+#testing males
+              #y=faminc
+        ivtest=ivreg(faminc~aged+agem+poverty+sexk+sex2nd+treatment|aged+agem+poverty+sexk+sex2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+ 
+        
+                      #y=participate
+        ivtest=ivreg(participated~aged+agem+poverty+sexk+sex2nd+treatment|aged+agem+poverty+sexk+sex2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+
+        
+                       #y=total hours worked in a year
+        ivtest=ivreg(hrstotald~aged+agem+poverty+sexk+sex2nd+treatment|aged+agem+poverty+sexk+sex2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+```
+
+to capture effects of the age now use our newly estimated model
+```{r echo=TRUE}
+#females   
+        #y=faminc
+        ivtest=ivreg(faminc~agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+treatment|agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+ summary(ivtest, diagnostics = TRUE)
+                    #y=participate
+        ivtest=ivreg(participatem~agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+treatment|agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+                        #y=total hours worked
+        ivtest=ivreg(hrstotalm~agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+treatment|agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+                                 
+#testing males
+              #y=faminc
+        ivtest=ivreg(faminc~aged+agem+poverty+sexk+sex2nd+agek+agek2nd+treatment|aged+agem+poverty+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+ 
+        
+                      #y=participate
+        ivtest=ivreg(participated~aged+agem+poverty+sexk+sex2nd+agek+agek2nd+treatment|aged+agem+poverty+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+
+        
+                       #y=total hours worked in a year
+        ivtest=ivreg(hrstotald~aged+agem+poverty+sexk+sex2nd+agek+agek2nd+treatment|aged+agem+poverty+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+```
+to capture effects of the age now use our newly estimated model
+```{r echo=TRUE}
+#females   
+        #y=faminc
+        ivtest=ivreg(faminc~agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+treatment|agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+ summary(ivtest, diagnostics = TRUE)
+                    #y=participate
+        ivtest=ivreg(participatem~agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+treatment|agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+                        #y=total hours worked
+        ivtest=ivreg(hrstotalm~agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+treatment|agem+poverty+dadind+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+                                 
+#testing males
+              #y=faminc
+        ivtest=ivreg(faminc~aged+agem+poverty+sexk+sex2nd+agek+agek2nd+treatment|aged+agem+poverty+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+ 
+        
+                      #y=participate
+        ivtest=ivreg(participated~aged+agem+poverty+sexk+sex2nd+agek+agek2nd+treatment|aged+agem+poverty+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+
+
+        
+                       #y=total hours worked in a year
+        ivtest=ivreg(hrstotald~aged+agem+poverty+sexk+sex2nd+agek+agek2nd+treatment|aged+agem+poverty+sexk+sex2nd+agek+agek2nd+twins2, data=try2) 
+        summary(ivtest, diagnostics = TRUE)
+```
+FEMALES
+
+IV – twins second birth. family income on mothers age, poverty, father indicator, sex of first and second child and treatment, age of first child and second child
+
+Coefficients:
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -17035.452    143.921 -118.367  < 2e-16 ***
+agem           518.106      4.877  106.227  < 2e-16 ***
+poverty       3826.813     12.048  317.639  < 2e-16 ***
+dadind        1771.185     55.014   32.195  < 2e-16 ***
+sexk            69.801     25.415    2.747  0.00602 ** 
+sex2nd          24.417     25.403    0.961  0.33645    
+agek          -213.159      8.524  -25.006  < 2e-16 ***
+agek2nd         11.638     16.708    0.697  0.48611    
+treatment     1715.503    208.469    8.229  < 2e-16 ***
+
+Residual standard error: 8782 on 479345 degrees of freedom
+Multiple R-Squared: 0.5116,	Adjusted R-squared: 0.5116 
+Wald test: 6.259e+04 on 8 and 479345 DF,  p-value: < 2.2e-16 
+
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child and treatment are significant at least at a=.05. bith of third child increases family income in a year by 1715 (decreased from previous calculation ) dollars on average (lesser effect than using same sex as IV) but the effect is closer to the other IV therefore we captured age effect
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is small therefore there seems to be need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV – twins second birth. participation of mother on mothers age, poverty, father indicator, sex of first and second child and treatment, age of first and second child
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.5254384  0.0078065  67.308  < 2e-16 ***
+agem        -0.0092898  0.0002646 -35.115  < 2e-16 ***
+poverty      0.0581001  0.0006535  88.908  < 2e-16 ***
+dadind      -0.2366232  0.0029840 -79.297  < 2e-16 ***
+sexk         0.0002731  0.0013785   0.198 0.842957    
+sex2nd       0.0032895  0.0013779   2.387 0.016970 *  
+agek         0.0203831  0.0004624  44.083  < 2e-16 ***
+agek2nd      0.0043774  0.0009063   4.830 1.37e-06 ***
+treatment   -0.0404774  0.0113077  -3.580 0.000344 ***
+
+Residual standard error: 0.4763 on 479345 degrees of freedom
+Multiple R-Squared: 0.08038,	Adjusted R-squared: 0.08037 
+Wald test:  4804 on 8 and 479345 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child and treatment are significant at least at a=.05. bith of third child decreases participation rate by 4% (decreased effect from previous calculation ) on average (lesser effect than using same sex as IV) but the effect is closer to the other IV therefore we captured age effect
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is small therefore there seems to be need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV – twins second birth. Hours worked in a year on age of mother, poverty, father indicator, sex of first and second child and treatment age of first and second child
+Coefficients:
+             Estimate Std. Error  t value Pr(>|t|)    
+(Intercept)  579.2260    13.1117   44.176  < 2e-16 ***
+agem         -16.9111     0.4443  -38.059  < 2e-16 ***
+poverty      121.6963     1.0976  110.877  < 2e-16 ***
+dadind      -562.4558     5.0119 -112.224  < 2e-16 ***
+sexk           3.5260     2.3153    1.523 0.127791    
+sex2nd         5.9093     2.3143    2.553 0.010668 *  
+agek          48.0591     0.7766   61.884  < 2e-16 ***
+agek2nd        5.8968     1.5222    3.874 0.000107 ***
+treatment    -64.3533    18.9922   -3.388 0.000703 ***
+
+Residual standard error: 800.1 on 479345 degrees of freedom
+Multiple R-Squared: 0.1277,	Adjusted R-squared: 0.1277 
+Wald test:  8348 on 8 and 479345 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child and treatment are significant at least at a=.05. bith of third child decreases hours worked in a year by 64 (increased from previous calculation ) hours on average (lesser effect than using same sex as IV) but the effect is closer to the other IV therefore we captured age effect
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is small therefore there seems to be need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+-	Male 
+IV – twins second birth. Family income on age of mother and father, poverty, sex of first and second child and treatment , age of first and second child
+Coefficients:
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -21083.051    189.710 -111.133  < 2e-16 ***
+aged           150.458      3.833   39.253  < 2e-16 ***
+agem           503.591      6.145   81.958  < 2e-16 ***
+poverty       4095.378     13.243  309.259  < 2e-16 ***
+sexk            83.013     28.788    2.884  0.00393 ** 
+sex2nd          30.865     28.762    1.073  0.28321    
+agek          -243.533      9.818  -24.806  < 2e-16 ***
+agek2nd         23.842     19.243    1.239  0.21534    
+treatment     1562.677    235.921    6.624 3.51e-11 ***
+
+Residual standard error: 9152 on 406256 degrees of freedom
+Multiple R-Squared: 0.4302,	Adjusted R-squared: 0.4302 
+Wald test: 3.829e+04 on 8 and 406256 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child and treatment are significant at least at a=.05. bith of third child decreases family income in a year by 1562 (decreased effect from previous calculation ) dollars on average (lesser effect than using same sex as IV) but the effect is closer to the other IV therefore we captured age effect
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is small therefore there seems to be need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV – twins second birth. Participation of father on age of mother and father, poverty, sex of first and second child and treatment, age of first and second child
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  8.777e-01  3.179e-03 276.107  < 2e-16 ***
+aged        -3.143e-03  6.423e-05 -48.936  < 2e-16 ***
+agem         1.821e-03  1.030e-04  17.683  < 2e-16 ***
+poverty      2.477e-02  2.219e-04 111.618  < 2e-16 ***
+sexk         1.275e-04  4.824e-04   0.264  0.79147    
+sex2nd      -1.361e-03  4.820e-04  -2.823  0.00476 ** 
+agek        -4.318e-04  1.645e-04  -2.624  0.00868 ** 
+agek2nd     -7.493e-04  3.225e-04  -2.324  0.02015 *  
+treatment    1.226e-02  3.953e-03   3.101  0.00193 ** 
+
+Residual standard error: 0.1534 on 406256 degrees of freedom
+Multiple R-Squared: 0.08072,	Adjusted R-squared: 0.08071 
+Wald test:  4435 on 8 and 406256 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child and treatment are significant at least at a=.05. bith of third child decreases participation by 1.2% (slightly decreased from previous calculation ) on average (lesser effect than using same sex as IV) but the effect is closer to the other IV therefore we captured age effect
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is big therefore there seems to be no need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+IV – twins second birth. hours worked in a year of mother on age of mother and father, poverty, sex of first and second child and treatment, age of first and second child
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 1204.0898    14.1627  85.018   <2e-16 ***
+aged          -7.6611     0.2862 -26.773   <2e-16 ***
+agem          17.3885     0.4587  37.907   <2e-16 ***
+poverty      118.6658     0.9886 120.032   <2e-16 ***
+sexk           5.1413     2.1491   2.392   0.0167 *  
+sex2nd        -0.5453     2.1472  -0.254   0.7995    
+agek         -11.5213     0.7329 -15.720   <2e-16 ***
+agek2nd        2.3044     1.4365   1.604   0.1087    
+treatment     22.2190    17.6126   1.262   0.2071    
+
+
+Residual standard error: 683.3 on 406256 degrees of freedom
+Multiple R-Squared: 0.09745,	Adjusted R-squared: 0.09743 
+Wald test:  5437 on 8 and 406256 DF,  p-value: < 2.2e-16 
+Interpretation :  in this model we are mainly interested in the Diagnostics Test part of the ivreg function of AER package in R.  all values except sex of second child and treatment are significant at least at a=.05. bith of third child decreases hours worked in a year by 22 (decreased effect from previous calculation ) hours on average (lesser effect than using same sex as IV) but the effect is closer to the other IV therefore we captured age effect
+ Weak Instruments : Null Hypothesis - instruments are weak (do not explain the variables well). Since p values are small we reject null at a=.001 therefore instruments are strong.  
+ Wu Hausman : Null Hypothesis - Cov(x,e)=0 (x is the treatment variable); Thus, rejecting the null hypothesis indicates the existence of endogeneity and the need for instrumental variables. In this case the p value is small therefore there seems to be need for IV.
+Sargan - H0:Cov(z,e)=0 (z is the instrumental variable) . In this case its not available since number IV=treatment
+
+# Question 12 
+###  Repeat the whole procedure with the single women sample.
+-- the sample is missing from the given set hence cannot finish this off
+
+# Conclusion
+the 2sls and IV estimates using children sex composition and twinning correlate with OLS estimates and show that more children reduces female labour supply (not men). We also see that OLS estimates seem to exaggerate the effect. in the paper we observe that fertility effects are smaller for college educated women and women with husbands (neither of those were possible to properly evaluate with the given data we have since we only have years of education which is not properly defined(eg people may retake a class and that could count as an additional year) we also couldnt estimate husband salary since there is no clear income indicator for either of the sex)
+unsurprisignly the fathers have very little effect of fertility in terms of labour supply (mothers appear to absorb the changes)
+as a possible further insights
+it would be useful to have more variables and better definitions
+it would be useful to have more recent data and canadian data
+it would be interesting to explore other variables as instruments and compare them
+
+#Appendix - The output by question
+Data Discovery Results
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+   0.00    0.00    0.00    0.13    0.00    4.00  132159 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  1.000   5.000   7.000   5.662   7.000   7.000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+      1    1265    2920    2871    4205   11730 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   3750    5005    6305    6488    7505   15660 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   5000    6880    8500    8561   10005   19725 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   6250    8490   10260   10451   11970   23575 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   7500   10005   12010   12229   14010   27420 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   8750   11520   14005   14225   16180   31435 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  10000   18810   23280   25891   30000   75000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+      1   11005   18230   19612   25610   75000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+      1   11005   18230   19612   25610   75000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+   0.00    1.00    1.00    0.97    1.00    1.00  132159 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  1.0000  0.6036  1.0000  1.0000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   0.00    0.00   20.00   20.53   40.00   99.00 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+   0.00   40.00   40.00   42.91   48.00   99.00  132159 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   0.00    0.00   16.00   22.48   50.00   52.00 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+   0.00   50.00   52.00   47.27   52.00   52.00  132159 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+      0       0     384     796    1720    5148 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+      0    2000    2080    2094    2340    5148  132159 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  20.00   26.00   29.00   28.85   32.00   35.00 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+  15.00   28.00   32.00   31.76   35.00   90.00  132159 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   0.00   14.00   14.00   14.44   15.00   22.00 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+   0.00   14.00   14.00   15.05   17.00   22.00  132159 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  1.0000  1.0000  0.8119  1.0000  1.0000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  1.000   1.000   2.000   2.016   2.000  12.000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  0.0000  0.4883  1.0000  1.0000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ 0.0000  0.0000  0.0000  0.2423  0.0000  1.0000 
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+   0.00    0.00    1.00    0.51    1.00    1.00  223132 
+                [,1]
+sexk     0.007634575
+samesex  0.054438284
+sex2nd   0.008111701
+twoboys  0.021953548
+twogirls 0.040992879
+twins2            NA
+           participatem        faminc       hoursm       weeksm    hrstotalm     lnfaminc
+agem       0.0861619586  0.2702306277  0.062327979  0.146961205  0.122522650  0.174724489
+gradem     0.0954065968  0.3033439711  0.042655176  0.089807076  0.053948242  0.203594953
+dadind    -0.0733931456  0.3811519942 -0.111544412 -0.090923904 -0.117224668  0.387302675
+kidcount  -0.1060294196 -0.0901561132 -0.090690394 -0.105487046 -0.092394287 -0.079883705
+sexk       0.0006901955 -0.0002654985  0.001600041  0.002608534  0.002863162 -0.002926485
+treatment -0.0962235087 -0.0662130222 -0.085035719 -0.098040836 -0.087996872 -0.058731735
+samesex   -0.0061452547 -0.0020824784 -0.006236293 -0.007004926 -0.007239548 -0.001089502
+poverty    0.1599241345  0.7003065335  0.132219104  0.207656329  0.181657475  0.692988580
+          participated        faminc hoursd weeksd hrstotald     lnfaminc
+aged                NA            NA     NA     NA        NA           NA
+graded              NA            NA     NA     NA        NA           NA
+kidcount            NA -0.0901561132     NA     NA        NA -0.079883705
+sexk                NA -0.0002654985     NA     NA        NA -0.002926485
+treatment           NA -0.0662130222     NA     NA        NA -0.058731735
+samesex             NA -0.0020824784     NA     NA        NA -0.001089502
+poverty             NA  0.7003065335     NA     NA        NA  0.692988580
+         participated       faminc        hoursd       weeksd    hrstotald
+aged     -0.050802719  0.222619363 -0.0076390944  0.010022502  0.022869115
+graded    0.091494184  0.326449529  0.1044735120  0.150969181  0.147513815
+kidcount -0.036495279 -0.037381628 -0.0002643181 -0.032859036 -0.004316365
+sexk     -0.000376872  0.002703841  0.0015365687  0.001415188  0.002150017
+
+Question 3
+Call:
+lm(formula = participatem ~ agem + gradem + dadind + treatment + 
+    poverty, data = try)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1.0057 -0.5503  0.2968  0.3691  0.9365 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.2678682  0.0048738   54.96   <2e-16 ***
+agem         0.0039390  0.0001473   26.74   <2e-16 ***
+gradem       0.0097208  0.0002498   38.91   <2e-16 ***
+dadind      -0.2575803  0.0016081 -160.17   <2e-16 ***
+treatment   -0.0885585  0.0014009  -63.22   <2e-16 ***
+poverty      0.0551552  0.0003176  173.64   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.4694 on 702480 degrees of freedom
+Multiple R-squared:  0.07909,	Adjusted R-squared:  0.07909 
+F-statistic: 1.207e+04 on 5 and 702480 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = faminc ~ agem + gradem + dadind + treatment + poverty, 
+    data = try)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-18838  -5461  -1640   2842  64459 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -21544.596     92.761 -232.26   <2e-16 ***
+agem           361.612      2.804  128.97   <2e-16 ***
+gradem         559.308      4.755  117.63   <2e-16 ***
+dadind        2648.127     30.607   86.52   <2e-16 ***
+treatment     1634.147     26.663   61.29   <2e-16 ***
+poverty       3550.525      6.045  587.31   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 8934 on 702480 degrees of freedom
+Multiple R-squared:  0.4881,	Adjusted R-squared:  0.4881 
+F-statistic: 1.34e+05 on 5 and 702480 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = hrstotalm ~ agem + gradem + dadind + treatment + 
+    poverty, data = try)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1709.7  -748.2  -196.3   688.4  5317.8 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  180.5374     8.5952   21.00   <2e-16 ***
+agem          17.7336     0.2598   68.26   <2e-16 ***
+gradem        -5.0023     0.4406  -11.35   <2e-16 ***
+dadind      -657.1529     2.8360 -231.72   <2e-16 ***
+treatment   -163.3075     2.4706  -66.10   <2e-16 ***
+poverty      132.3134     0.5602  236.20   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 827.8 on 702480 degrees of freedom
+Multiple R-squared:  0.1255,	Adjusted R-squared:  0.1255 
+F-statistic: 2.016e+04 on 5 and 702480 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = participated ~ aged + graded + treatment + agem + 
+    gradem + poverty, data = try)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-1.04038 -0.00268  0.00678  0.02857  0.29283 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  8.559e-01  1.842e-03 464.761   <2e-16 ***
+aged        -2.946e-03  5.219e-05 -56.446   <2e-16 ***
+graded       1.162e-03  8.682e-05  13.383   <2e-16 ***
+treatment    1.272e-02  4.993e-04  25.479   <2e-16 ***
+agem         1.173e-03  7.404e-05  15.849   <2e-16 ***
+gradem       9.199e-05  1.090e-04   0.844    0.399    
+poverty      2.546e-02  1.266e-04 201.145   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1531 on 570320 degrees of freedom
+  (132159 observations deleted due to missingness)
+Multiple R-squared:  0.08019,	Adjusted R-squared:  0.08018 
+F-statistic:  8286 on 6 and 570320 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = faminc ~ aged + graded + treatment + agem + gradem + 
+    poverty, data = try)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-22621  -5524  -1746   2999  60938 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -28919.403    109.379 -264.40   <2e-16 ***
+aged           201.024      3.100   64.86   <2e-16 ***
+graded         510.505      5.157   99.00   <2e-16 ***
+treatment     1407.500     29.654   47.47   <2e-16 ***
+agem           304.335      4.397   69.21   <2e-16 ***
+gradem         312.355      6.473   48.26   <2e-16 ***
+poverty       3757.820      7.518  499.85   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 9090 on 570320 degrees of freedom
+  (132159 observations deleted due to missingness)
+Multiple R-squared:  0.4282,	Adjusted R-squared:  0.4282 
+F-statistic: 7.119e+04 on 6 and 570320 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = hrstotald ~ aged + graded + treatment + agem + gradem + 
+    poverty, data = try)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-2410.4  -200.9   -70.3   310.9  3982.8 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 1009.0472     8.1469  123.86  < 2e-16 ***
+aged          -6.3133     0.2309  -27.35  < 2e-16 ***
+graded        15.2998     0.3841   39.84  < 2e-16 ***
+treatment     88.4728     2.2087   40.06  < 2e-16 ***
+agem           8.8957     0.3275   27.16  < 2e-16 ***
+gradem         3.0036     0.4821    6.23 4.67e-10 ***
+poverty      119.7425     0.5600  213.84  < 2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 677.1 on 570320 degrees of freedom
+  (132159 observations deleted due to missingness)
+Multiple R-squared:  0.09986,	Adjusted R-squared:  0.09985 
+F-statistic: 1.054e+04 on 6 and 570320 DF,  p-value: < 2.2e-16
+
+Question 5
+  participatem        faminc          hoursm          weeksm        hrstotalm   
+ Min.   :0.0000   Min.   :    1   Min.   : 0.00   Min.   : 0.00   Min.   :   0  
+ 1st Qu.:0.0000   1st Qu.:10320   1st Qu.: 0.00   1st Qu.: 0.00   1st Qu.:   0  
+ Median :1.0000   Median :17510   Median :35.00   Median :32.00   Median : 920  
+ Mean   :0.7032   Mean   :19052   Mean   :24.82   Mean   :27.52   Mean   :1005  
+ 3rd Qu.:1.0000   3rd Qu.:25015   3rd Qu.:40.00   3rd Qu.:52.00   3rd Qu.:2000  
+ Max.   :1.0000   Max.   :75000   Max.   :99.00   Max.   :52.00   Max.   :5148  
+  participatem        faminc          hoursm          weeksm        hrstotalm     
+ Min.   :0.0000   Min.   :    1   Min.   : 0.00   Min.   : 0.00   Min.   :   0.0  
+ 1st Qu.:0.0000   1st Qu.:11210   1st Qu.: 0.00   1st Qu.: 0.00   1st Qu.:   0.0  
+ Median :1.0000   Median :18710   Median :15.00   Median : 9.00   Median : 192.0  
+ Mean   :0.5572   Mean   :19873   Mean   :18.53   Mean   :20.14   Mean   : 698.9  
+ 3rd Qu.:1.0000   3rd Qu.:25950   3rd Qu.:40.00   3rd Qu.:48.00   3rd Qu.:1456.0  
+ Max.   :1.0000   Max.   :75000   Max.   :99.00   Max.   :52.00   Max.   :5148.0 
+
+Question 6
+Call:
+lm(formula = treatment ~ agem + dadind + poverty, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-0.7977 -0.3492 -0.2291  0.5371  1.0970 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -0.1958344  0.0052930  -37.00   <2e-16 ***
+agem         0.0264665  0.0001773  149.25   <2e-16 ***
+dadind       0.1286767  0.0020987   61.31   <2e-16 ***
+poverty     -0.0615044  0.0003580 -171.81   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.4582 on 479350 degrees of freedom
+Multiple R-squared:  0.08315,	Adjusted R-squared:  0.08315 
+F-statistic: 1.449e+04 on 3 and 479350 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = treatment ~ aged + poverty + agem, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-0.9456 -0.3571 -0.2325  0.5561  0.9886 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept) -0.1085728  0.0059463  -18.26   <2e-16 ***
+aged         0.0043665  0.0001886   23.16   <2e-16 ***
+poverty     -0.0596051  0.0004070 -146.44   <2e-16 ***
+agem         0.0227145  0.0002640   86.05   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.4583 on 406261 degrees of freedom
+  (73089 observations deleted due to missingness)
+Multiple R-squared:  0.07836,	Adjusted R-squared:  0.07835 
+F-statistic: 1.151e+04 on 3 and 406261 DF,  p-value: < 2.2e-16
+
+
+Call:
+glm(formula = treatment ~ agem + dadind + poverty, family = binomial(link = "probit"), 
+    data = try2)
+
+Deviance Residuals: 
+    Min       1Q   Median       3Q      Max  
+-1.8052  -0.9176  -0.7086   1.2487   2.4929  
+
+Coefficients:
+              Estimate Std. Error z value Pr(>|z|)    
+(Intercept) -2.0443568  0.0157557  -129.8   <2e-16 ***
+agem         0.0771997  0.0005326   145.0   <2e-16 ***
+dadind       0.3693130  0.0061453    60.1   <2e-16 ***
+poverty     -0.1711410  0.0010462  -163.6   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+(Dispersion parameter for binomial family taken to be 1)
+
+    Null deviance: 623694  on 479353  degrees of freedom
+Residual deviance: 582705  on 479350  degrees of freedom
+AIC: 582713
+
+Number of Fisher Scoring iterations: 4
+
+
+Call:
+glm(formula = treatment ~ aged + poverty + agem, family = binomial(link = "probit"), 
+    data = try2)
+
+Deviance Residuals: 
+    Min       1Q   Median       3Q      Max  
+-2.1261  -0.9270  -0.7222   1.2721   2.2316  
+
+Coefficients:
+              Estimate Std. Error z value Pr(>|z|)    
+(Intercept) -1.8103538  0.0175244 -103.31   <2e-16 ***
+aged         0.0121200  0.0005389   22.49   <2e-16 ***
+poverty     -0.1638132  0.0011717 -139.80   <2e-16 ***
+agem         0.0670481  0.0007746   86.56   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+(Dispersion parameter for binomial family taken to be 1)
+
+    Null deviance: 526661  on 406264  degrees of freedom
+Residual deviance: 494101  on 406261  degrees of freedom
+  (73089 observations deleted due to missingness)
+AIC: 494109
+
+Number of Fisher Scoring iterations: 4
+
+
+Call:
+glm(formula = treatment ~ agem + dadind + poverty, family = binomial(link = "logit"), 
+    data = try2)
+
+Deviance Residuals: 
+    Min       1Q   Median       3Q      Max  
+-1.8081  -0.9157  -0.7059   1.2496   2.3905  
+
+Coefficients:
+             Estimate Std. Error z value Pr(>|z|)    
+(Intercept) -3.390260   0.026492 -127.97   <2e-16 ***
+agem         0.127955   0.000900  142.18   <2e-16 ***
+dadind       0.610389   0.010209   59.79   <2e-16 ***
+poverty     -0.280992   0.001744 -161.10   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+(Dispersion parameter for binomial family taken to be 1)
+
+    Null deviance: 623694  on 479353  degrees of freedom
+Residual deviance: 582738  on 479350  degrees of freedom
+AIC: 582746
+
+Number of Fisher Scoring iterations: 4
+
+
+Call:
+glm(formula = treatment ~ aged + poverty + agem, family = binomial(link = "logit"), 
+    data = try2)
+
+Deviance Residuals: 
+    Min       1Q   Median       3Q      Max  
+-2.0904  -0.9253  -0.7225   1.2695   2.1797  
+
+Coefficients:
+              Estimate Std. Error z value Pr(>|z|)    
+(Intercept) -3.0002936  0.0293166 -102.34   <2e-16 ***
+aged         0.0196771  0.0008849   22.24   <2e-16 ***
+poverty     -0.2684032  0.0019397 -138.37   <2e-16 ***
+agem         0.1113641  0.0012928   86.14   <2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+(Dispersion parameter for binomial family taken to be 1)
+
+    Null deviance: 526661  on 406264  degrees of freedom
+Residual deviance: 494162  on 406261  degrees of freedom
+  (73089 observations deleted due to missingness)
+AIC: 494170
+
+Number of Fisher Scoring iterations: 4
+
+Question 7
+ 
+ 
+ 
+
+ 
+ 
+ 
+Question 8
+[1] -1004.449
+
+Call:
+lm(formula = faminc ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+      20490        -1739  
+
+[1] -0.1171706
+
+Call:
+lm(formula = participatem ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+    0.59267     -0.09988  
+
+[1] -238.0461
+
+Call:
+lm(formula = hrstotalm ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+      754.8       -157.5  
+
+[1] 0.006857337
+
+Call:
+lm(formula = participated ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+    0.97866     -0.01407  
+
+[1] 42.75958
+
+Call:
+lm(formula = hrstotald ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+    2121.97       -40.09
+
+Question 9
+Call:
+lm(formula = participatem ~ treatpredict + agem + dadind + poverty + 
+    sexk + sex2nd, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-0.9045 -0.5558  0.3626  0.4079  0.8028 
+
+Coefficients:
+               Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   0.2638184  0.0079181  33.318  < 2e-16 ***
+treatpredict -0.0827823  0.0273052  -3.032  0.00243 ** 
+agem          0.0086747  0.0007464  11.622  < 2e-16 ***
+dadind       -0.2564070  0.0041530 -61.740  < 2e-16 ***
+poverty       0.0508260  0.0017209  29.534  < 2e-16 ***
+sexk          0.0010487  0.0014067   0.746  0.45595    
+sex2nd        0.0040043  0.0014068   2.846  0.00442 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.4823 on 479347 degrees of freedom
+Multiple R-squared:  0.05722,	Adjusted R-squared:  0.05721 
+F-statistic:  4849 on 6 and 479347 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = participatem ~ treatpredict3 + agem + dadind + poverty + 
+    sexk, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-0.9032 -0.5565  0.3636  0.4070  0.8008 
+
+Coefficients:
+                Estimate Std. Error t value Pr(>|t|)    
+(Intercept)    0.2679389  0.0077847  34.419  < 2e-16 ***
+treatpredict3 -0.0721696  0.0270497  -2.668  0.00763 ** 
+agem           0.0083933  0.0007399  11.345  < 2e-16 ***
+dadind        -0.2578065  0.0041238 -62.516  < 2e-16 ***
+poverty        0.0514751  0.0017058  30.177  < 2e-16 ***
+sexk           0.0010131  0.0014066   0.720  0.47139    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.4823 on 479348 degrees of freedom
+Multiple R-squared:  0.0572,	Adjusted R-squared:  0.05719 
+F-statistic:  5817 on 5 and 479348 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = faminc ~ treatpredict + agem + dadind + poverty + 
+    sexk + sex2nd, data = try2)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-14209  -5267  -1601   2550  55549 
+
+Coefficients:
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept)  -15111.65     144.55 -104.543  < 2e-16 ***
+treatpredict   1306.40     498.47    2.621  0.00877 ** 
+agem            389.85      13.63   28.610  < 2e-16 ***
+dadind         2033.56      75.82   26.822  < 2e-16 ***
+poverty        3836.76      31.42  122.127  < 2e-16 ***
+sexk             68.22      25.68    2.656  0.00790 ** 
+sex2nd           24.31      25.68    0.947  0.34387    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 8805 on 479347 degrees of freedom
+Multiple R-squared:  0.509,	Adjusted R-squared:  0.509 
+F-statistic: 8.283e+04 on 6 and 479347 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = faminc ~ treatpredict3 + agem + dadind + poverty + 
+    sexk, data = try2)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-14199  -5262  -1599   2549  55539 
+
+Coefficients:
+               Estimate Std. Error  t value Pr(>|t|)    
+(Intercept)   -15086.64     142.11 -106.159  < 2e-16 ***
+treatpredict3   1370.83     493.80    2.776  0.00550 ** 
+agem             388.14      13.51   28.738  < 2e-16 ***
+dadind          2025.06      75.28   26.899  < 2e-16 ***
+poverty         3840.70      31.14  123.339  < 2e-16 ***
+sexk              68.00      25.68    2.648  0.00809 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 8805 on 479348 degrees of freedom
+Multiple R-squared:  0.509,	Adjusted R-squared:  0.509 
+F-statistic: 9.939e+04 on 5 and 479348 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = hrstotalm ~ treatpredict + agem + dadind + poverty + 
+    sexk + sex2nd, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1503.9  -711.5  -263.0   658.6  5252.4 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept)    11.658     13.389   0.871 0.383904    
+treatpredict -164.049     46.172  -3.553 0.000381 ***
+agem           22.587      1.262  17.896  < 2e-16 ***
+dadind       -604.933      7.023 -86.141  < 2e-16 ***
+poverty       105.609      2.910  36.292  < 2e-16 ***
+sexk            5.310      2.379   2.232 0.025602 *  
+sex2nd          7.488      2.379   3.148 0.001646 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 815.6 on 479347 degrees of freedom
+Multiple R-squared:  0.09357,	Adjusted R-squared:  0.09356 
+F-statistic:  8247 on 6 and 479347 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = hrstotalm ~ treatpredict3 + agem + dadind + poverty + 
+    sexk, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1504.9  -709.4  -262.2   659.4  5248.3 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)     19.364     13.164   1.471  0.14129    
+treatpredict3 -144.203     45.740  -3.153  0.00162 ** 
+agem            22.061      1.251  17.634  < 2e-16 ***
+dadind        -607.550      6.973 -87.126  < 2e-16 ***
+poverty        106.822      2.884  37.035  < 2e-16 ***
+sexk             5.243      2.379   2.204  0.02751 *  
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 815.6 on 479348 degrees of freedom
+Multiple R-squared:  0.09355,	Adjusted R-squared:  0.09354 
+F-statistic:  9894 on 5 and 479348 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = participated ~ treatpredictd + aged + agem + poverty + 
+    sexk + sex2nd, data = fixsample)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-1.05251 -0.00365  0.00583  0.03316  0.28413 
+
+Coefficients:
+                Estimate Std. Error t value Pr(>|t|)    
+(Intercept)    8.927e-01  2.270e-03 393.343  < 2e-16 ***
+treatpredictd  2.069e-02  8.924e-03   2.318  0.02045 *  
+aged          -3.311e-03  7.419e-05 -44.628  < 2e-16 ***
+agem           9.810e-04  2.211e-04   4.436 9.17e-06 ***
+poverty        2.555e-02  5.489e-04  46.547  < 2e-16 ***
+sexk           4.874e-05  4.867e-04   0.100  0.92023    
+sex2nd        -1.446e-03  4.860e-04  -2.975  0.00293 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1534 on 406258 degrees of freedom
+Multiple R-squared:  0.08017,	Adjusted R-squared:  0.08016 
+F-statistic:  5902 on 6 and 406258 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = participated ~ treatpredict3d + aged + agem + poverty + 
+    sexk, data = fixsample)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-1.05298 -0.00367  0.00564  0.03318  0.28331 
+
+Coefficients:
+                 Estimate Std. Error t value Pr(>|t|)    
+(Intercept)     8.916e-01  2.238e-03 398.327  < 2e-16 ***
+treatpredict3d  1.709e-02  8.841e-03   1.933   0.0532 .  
+aged           -3.295e-03  7.400e-05 -44.528  < 2e-16 ***
+agem            1.063e-03  2.194e-04   4.844 1.27e-06 ***
+poverty         2.534e-02  5.443e-04  46.555  < 2e-16 ***
+sexk            6.316e-05  4.866e-04   0.130   0.8967    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1534 on 406259 degrees of freedom
+Multiple R-squared:  0.08015,	Adjusted R-squared:  0.08014 
+F-statistic:  7080 on 5 and 406259 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = faminc ~ treatpredictd + aged + agem + poverty + 
+    sexk + sex2nd, data = fixsample)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-17776  -5515  -1845   2672  54489 
+
+Coefficients:
+                Estimate Std. Error  t value Pr(>|t|)    
+(Intercept)   -18687.200    135.669 -137.741  < 2e-16 ***
+treatpredictd   1200.082    533.433    2.250  0.02447 *  
+aged             128.678      4.435   29.016  < 2e-16 ***
+agem             383.307     13.219   28.997  < 2e-16 ***
+poverty         4115.269     32.815  125.408  < 2e-16 ***
+sexk              81.633     29.092    2.806  0.00502 ** 
+sex2nd            31.091     29.053    1.070  0.28456    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 9171 on 406258 degrees of freedom
+Multiple R-squared:  0.4279,	Adjusted R-squared:  0.4279 
+F-statistic: 5.064e+04 on 6 and 406258 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = faminc ~ treatpredict3d + aged + agem + poverty + 
+    sexk, data = fixsample)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-17758  -5514  -1845   2673  54507 
+
+Coefficients:
+                 Estimate Std. Error  t value Pr(>|t|)    
+(Intercept)    -18663.202    133.803 -139.483  < 2e-16 ***
+treatpredict3d   1277.356    528.523    2.417  0.01566 *  
+aged              128.343      4.424   29.013  < 2e-16 ***
+agem              381.547     13.116   29.089  < 2e-16 ***
+poverty          4119.838     32.536  126.624  < 2e-16 ***
+sexk               81.323     29.091    2.795  0.00518 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 9171 on 406259 degrees of freedom
+Multiple R-squared:  0.4279,	Adjusted R-squared:  0.4279 
+F-statistic: 6.077e+04 on 5 and 406259 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = hrstotald ~ treatpredictd + aged + agem + poverty + 
+    sexk + sex2nd, data = fixsample)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-2363.7  -191.1  -100.8   323.4  3841.9 
+
+Coefficients:
+               Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   1316.2115    10.1194 130.069  < 2e-16 ***
+treatpredictd  118.1876    39.7879   2.970  0.00297 ** 
+aged            -9.0526     0.3308 -27.367  < 2e-16 ***
+agem             9.7534     0.9860   9.892  < 2e-16 ***
+poverty        126.0399     2.4476  51.495  < 2e-16 ***
+sexk             4.1917     2.1699   1.932  0.05340 .  
+sex2nd          -1.3407     2.1670  -0.619  0.53614    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 684 on 406258 degrees of freedom
+Multiple R-squared:  0.09541,	Adjusted R-squared:  0.0954 
+F-statistic:  7142 on 6 and 406258 DF,  p-value: < 2.2e-16
+
+
+Call:
+lm(formula = hrstotald ~ treatpredict3d + aged + agem + poverty + 
+    sexk, data = fixsample)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-2364.3  -190.4  -100.8   323.3  3842.7 
+
+Coefficients:
+                Estimate Std. Error t value Pr(>|t|)    
+(Intercept)    1315.1767     9.9801 131.779  < 2e-16 ***
+treatpredict3d  114.8555    39.4217   2.914  0.00357 ** 
+aged             -9.0381     0.3300 -27.392  < 2e-16 ***
+agem              9.8293     0.9783  10.047  < 2e-16 ***
+poverty         125.8428     2.4268  51.855  < 2e-16 ***
+sexk              4.2051     2.1698   1.938  0.05263 .  
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 684 on 406259 degrees of freedom
+Multiple R-squared:  0.09541,	Adjusted R-squared:  0.0954 
+F-statistic:  8570 on 5 and 406259 DF,  p-value: < 2.2e-16
+
+Question 10
+Call:
+ivreg(formula = faminc ~ agem + poverty + dadind + sexk + sex2nd + 
+    treatment | agem + poverty + dadind + sexk + sex2nd + samesex, 
+    data = try2)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-13773  -5329  -1634   2522  55389 
+
+Coefficients:
+             Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -15111.65     144.40 -104.654  < 2e-16 ***
+agem           389.85      13.61   28.640  < 2e-16 ***
+poverty       3836.76      31.38  122.256  < 2e-16 ***
+dadind        2033.56      75.74   26.851  < 2e-16 ***
+sexk            68.22      25.65    2.659  0.00783 ** 
+sex2nd          24.31      25.66    0.948  0.34336    
+treatment     1306.40     497.95    2.624  0.00870 ** 
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 479347  1490.694  <2e-16 ***
+Wu-Hausman            1 479346     0.501   0.479    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 8795 on 479347 degrees of freedom
+Multiple R-Squared: 0.5101,	Adjusted R-squared: 0.5101 
+Wald test: 8.3e+04 on 6 and 479347 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = faminc ~ agem + poverty + dadind + sexk + treatment | 
+    agem + poverty + dadind + sexk + twoboys + twogirls, data = try2)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-13741  -5333  -1631   2529  55371 
+
+Coefficients:
+             Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -15086.64     141.97 -106.265  < 2e-16 ***
+agem           388.14      13.49   28.766  < 2e-16 ***
+poverty       3840.70      31.11  123.462  < 2e-16 ***
+dadind        2025.06      75.21   26.926  < 2e-16 ***
+sexk            68.00      25.65    2.651  0.00803 ** 
+treatment     1370.83     493.31    2.779  0.00546 ** 
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      2 479347   759.509  <2e-16 ***
+Wu-Hausman            1 479347     0.714   0.398    
+Sargan                1     NA     0.898   0.343    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 8796 on 479348 degrees of freedom
+Multiple R-Squared:  0.51,	Adjusted R-squared:  0.51 
+Wald test: 9.959e+04 on 5 and 479348 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = participatem ~ agem + poverty + dadind + sexk + 
+    sex2nd + treatment | agem + poverty + dadind + sexk + sex2nd + 
+    samesex, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-0.9283 -0.5379  0.3292  0.4149  0.8510 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.2638184  0.0079003  33.393  < 2e-16 ***
+agem         0.0086747  0.0007447  11.648  < 2e-16 ***
+poverty      0.0508260  0.0017170  29.601  < 2e-16 ***
+dadind      -0.2564070  0.0041437 -61.879  < 2e-16 ***
+sexk         0.0010487  0.0014035   0.747  0.45493    
+sex2nd       0.0040043  0.0014037   2.853  0.00434 ** 
+treatment   -0.0827823  0.0272440  -3.039  0.00238 ** 
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 479347  1490.694  <2e-16 ***
+Wu-Hausman            1 479346     0.171   0.679    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.4812 on 479347 degrees of freedom
+Multiple R-Squared: 0.06145,	Adjusted R-squared: 0.06144 
+Wald test:  4871 on 6 and 479347 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = participatem ~ agem + poverty + dadind + sexk + 
+    treatment | agem + poverty + dadind + sexk + twoboys + twogirls, 
+    data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-0.9230 -0.5417  0.3348  0.4126  0.8427 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.2679389  0.0077668  34.498  < 2e-16 ***
+agem         0.0083933  0.0007381  11.371  < 2e-16 ***
+poverty      0.0514751  0.0017018  30.247  < 2e-16 ***
+dadind      -0.2578065  0.0041143 -62.660  < 2e-16 ***
+sexk         0.0010131  0.0014034   0.722  0.47037    
+treatment   -0.0721696  0.0269874  -2.674  0.00749 ** 
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      2 479347   759.509 < 2e-16 ***
+Wu-Hausman            1 479347     0.001 0.97997    
+Sargan                1     NA     8.139 0.00433 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.4812 on 479348 degrees of freedom
+Multiple R-Squared: 0.06154,	Adjusted R-squared: 0.06153 
+Wald test:  5844 on 5 and 479348 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = hrstotalm ~ agem + poverty + dadind + sexk + 
+    sex2nd + treatment | agem + poverty + dadind + sexk + sex2nd + 
+    samesex, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1554.3  -689.4  -262.6   651.5  5280.2 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   11.658     13.375   0.872 0.383410    
+agem          22.587      1.261  17.914  < 2e-16 ***
+poverty      105.609      2.907  36.329  < 2e-16 ***
+dadind      -604.933      7.015 -86.231  < 2e-16 ***
+sexk           5.310      2.376   2.235 0.025449 *  
+sex2nd         7.488      2.376   3.151 0.001627 ** 
+treatment   -164.049     46.124  -3.557 0.000376 ***
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 479347  1490.694  <2e-16 ***
+Wu-Hausman            1 479346     1.799    0.18    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 814.7 on 479347 degrees of freedom
+Multiple R-Squared: 0.09545,	Adjusted R-squared: 0.09544 
+Wald test:  8264 on 6 and 479347 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = hrstotalm ~ agem + poverty + dadind + sexk + 
+    treatment | agem + poverty + dadind + sexk + twoboys + twogirls, 
+    data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1544.5  -694.3  -262.8   651.7  5266.2 
+
+Coefficients:
+            Estimate Std. Error t value Pr(>|t|)    
+(Intercept)   19.364     13.146   1.473  0.14075    
+agem          22.061      1.249  17.658  < 2e-16 ***
+poverty      106.822      2.880  37.086  < 2e-16 ***
+dadind      -607.550      6.964 -87.245  < 2e-16 ***
+sexk           5.243      2.375   2.207  0.02730 *  
+treatment   -144.203     45.678  -3.157  0.00159 ** 
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      2 479347   759.509 < 2e-16 ***
+Wu-Hausman            1 479347     0.846 0.35761    
+Sargan                1     NA     9.935 0.00162 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 814.4 on 479348 degrees of freedom
+Multiple R-Squared: 0.09602,	Adjusted R-squared: 0.09601 
+Wald test:  9921 on 5 and 479348 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = faminc ~ aged + agem + poverty + sexk + sex2nd + 
+    treatment | aged + agem + poverty + sexk + sex2nd + samesex, 
+    data = try2)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-17092  -5567  -1892   2668  54481 
+
+Coefficients:
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -18687.200    135.640 -137.770  < 2e-16 ***
+aged           128.678      4.434   29.022  < 2e-16 ***
+agem           383.307     13.216   29.003  < 2e-16 ***
+poverty       4115.269     32.808  125.435  < 2e-16 ***
+sexk            81.633     29.086    2.807  0.00501 ** 
+sex2nd          31.091     29.047    1.070  0.28446    
+treatment     1200.082    533.320    2.250  0.02444 *  
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 406258  1412.471  <2e-16 ***
+Wu-Hausman            1 406257     0.981   0.322    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 9169 on 406258 degrees of freedom
+Multiple R-Squared: 0.4281,	Adjusted R-squared: 0.4281 
+Wald test: 5.066e+04 on 6 and 406258 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = faminc ~ aged + agem + poverty + sexk + treatment | 
+    aged + agem + poverty + sexk + twoboys + twogirls, data = try2)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-17031  -5571  -1895   2668  54498 
+
+Coefficients:
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -18663.202    133.789 -139.497  < 2e-16 ***
+aged           128.343      4.423   29.016  < 2e-16 ***
+agem           381.547     13.115   29.092  < 2e-16 ***
+poverty       4119.838     32.533  126.637  < 2e-16 ***
+sexk            81.323     29.088    2.796  0.00518 ** 
+treatment     1277.356    528.468    2.417  0.01565 *  
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      2 406258   719.418  <2e-16 ***
+Wu-Hausman            1 406258     1.313   0.252    
+Sargan                1     NA     1.145   0.285    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 9170 on 406259 degrees of freedom
+Multiple R-Squared: 0.428,	Adjusted R-squared: 0.428 
+Wald test: 6.078e+04 on 5 and 406259 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = participated ~ aged + agem + poverty + sexk + 
+    sex2nd + treatment | aged + agem + poverty + sexk + sex2nd + 
+    samesex, data = try2)
+
+Residuals:
+      Min        1Q    Median        3Q       Max 
+-1.049425 -0.004890  0.008256  0.033083  0.286717 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  8.927e-01  2.271e-03 393.073  < 2e-16 ***
+aged        -3.311e-03  7.424e-05 -44.597  < 2e-16 ***
+agem         9.810e-04  2.213e-04   4.433  9.3e-06 ***
+poverty      2.555e-02  5.493e-04  46.515  < 2e-16 ***
+sexk         4.874e-05  4.870e-04   0.100  0.92029    
+sex2nd      -1.446e-03  4.863e-04  -2.973  0.00295 ** 
+treatment    2.069e-02  8.930e-03   2.316  0.02053 *  
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 406258  1412.471  <2e-16 ***
+Wu-Hausman            1 406257     2.483   0.115    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1535 on 406258 degrees of freedom
+Multiple R-Squared: 0.07891,	Adjusted R-squared: 0.07889 
+Wald test:  5893 on 6 and 406258 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = participated ~ aged + agem + poverty + sexk + 
+    treatment | aged + agem + poverty + sexk + twoboys + twogirls, 
+    data = try2)
+
+Residuals:
+      Min        1Q    Median        3Q       Max 
+-1.049362 -0.004398  0.007783  0.032886  0.284125 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  8.916e-01  2.239e-03 398.209  < 2e-16 ***
+aged        -3.295e-03  7.402e-05 -44.515  < 2e-16 ***
+agem         1.063e-03  2.195e-04   4.842 1.28e-06 ***
+poverty      2.534e-02  5.445e-04  46.542  < 2e-16 ***
+sexk         6.316e-05  4.868e-04   0.130   0.8968    
+treatment    1.709e-02  8.844e-03   1.933   0.0533 .  
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      2 406258   719.418 < 2e-16 ***
+Wu-Hausman            1 406258     1.403 0.23615    
+Sargan                1     NA     8.844 0.00294 ** 
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1535 on 406259 degrees of freedom
+Multiple R-Squared: 0.07961,	Adjusted R-squared: 0.0796 
+Wald test:  7076 on 5 and 406259 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = hrstotald ~ aged + agem + poverty + sexk + sex2nd + 
+    treatment | aged + agem + poverty + sexk + sex2nd + samesex, 
+    data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-2434.5  -232.7   -92.2   298.0  3899.9 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 1316.2115    10.1277 129.961   <2e-16 ***
+aged          -9.0526     0.3311 -27.344   <2e-16 ***
+agem           9.7534     0.9868   9.884   <2e-16 ***
+poverty      126.0399     2.4497  51.452   <2e-16 ***
+sexk           4.1917     2.1717   1.930   0.0536 .  
+sex2nd        -1.3407     2.1688  -0.618   0.5365    
+treatment    118.1876    39.8209   2.968   0.0030 ** 
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 406258  1412.471  <2e-16 ***
+Wu-Hausman            1 406257     3.522  0.0606 .  
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 684.6 on 406258 degrees of freedom
+Multiple R-Squared: 0.09392,	Adjusted R-squared: 0.0939 
+Wald test:  7130 on 6 and 406258 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = hrstotald ~ aged + agem + poverty + sexk + treatment | 
+    aged + agem + poverty + sexk + twoboys + twogirls, data = try2)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-2431.63  -231.51   -92.95   298.31  3899.03 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 1315.1767     9.9873 131.685   <2e-16 ***
+aged          -9.0381     0.3302 -27.372   <2e-16 ***
+agem           9.8293     0.9790  10.040   <2e-16 ***
+poverty      125.8428     2.4286  51.818   <2e-16 ***
+sexk           4.2051     2.1714   1.937   0.0528 .  
+treatment    114.8555    39.4500   2.911   0.0036 ** 
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      2 406258   719.418  <2e-16 ***
+Wu-Hausman            1 406258     3.274  0.0704 .  
+Sargan                1     NA     0.382  0.5364    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 684.5 on 406259 degrees of freedom
+Multiple R-Squared: 0.09411,	Adjusted R-squared: 0.0941 
+Wald test:  8558 on 5 and 406259 DF,  p-value: < 2.2e-16 
+
+Question 11
+[1] -138.0252
+
+Call:
+lm(formula = faminc ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+      20490        -1739  
+
+[1] -0.07305634
+
+Call:
+lm(formula = participatem ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+    0.59267     -0.09988  
+
+[1] -129.3552
+
+Call:
+lm(formula = hrstotalm ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+      754.8       -157.5  
+
+[1] 0.003651623
+
+Call:
+lm(formula = participated ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+    0.97866     -0.01407  
+
+[1] -14.86295
+
+Call:
+lm(formula = hrstotald ~ treatment, data = try2)
+
+Coefficients:
+(Intercept)    treatment  
+    2121.97       -40.09
+
+
+
+Call:
+ivreg(formula = faminc ~ agem + poverty + dadind + sexk + sex2nd + 
+    treatment | agem + poverty + dadind + sexk + sex2nd + twins2, 
+    data = try2)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-13620  -5351  -1643   2529  55341 
+
+Coefficients:
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -15010.322    112.520 -133.401  < 2e-16 ***
+agem           376.631      6.754   55.762  < 2e-16 ***
+poverty       3867.479     15.196  254.509  < 2e-16 ***
+dadind        1969.230     49.305   39.940  < 2e-16 ***
+sexk            64.729     25.483    2.540   0.0111 *  
+sex2nd          20.796     25.483    0.816   0.4145    
+treatment     1805.874    220.353    8.195  2.5e-16 ***
+
+Diagnostic tests:
+                    df1    df2 statistic  p-value    
+Weak instruments      1 479347   7723.52  < 2e-16 ***
+Wu-Hausman            1 479346     15.19 9.71e-05 ***
+Sargan                0     NA        NA       NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 8803 on 479347 degrees of freedom
+Multiple R-Squared: 0.5093,	Adjusted R-squared: 0.5093 
+Wald test: 8.288e+04 on 6 and 479347 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = participatem ~ agem + poverty + dadind + sexk + 
+    sex2nd + treatment | agem + poverty + dadind + sexk + sex2nd + 
+    twins2, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-0.9194 -0.5462  0.3407  0.4113  0.8335 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  0.2696860  0.0061518  43.839  < 2e-16 ***
+agem         0.0079092  0.0003693  21.419  < 2e-16 ***
+poverty      0.0526046  0.0008308  63.318  < 2e-16 ***
+dadind      -0.2601319  0.0026956 -96.501  < 2e-16 ***
+sexk         0.0008468  0.0013932   0.608  0.54331    
+sex2nd       0.0038008  0.0013932   2.728  0.00637 ** 
+treatment   -0.0538607  0.0120473  -4.471  7.8e-06 ***
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 479347  7723.522  <2e-16 ***
+Wu-Hausman            1 479346     2.185   0.139    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.4813 on 479347 degrees of freedom
+Multiple R-Squared: 0.06129,	Adjusted R-squared: 0.06128 
+Wald test:  4872 on 6 and 479347 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = hrstotalm ~ agem + poverty + dadind + sexk + 
+    sex2nd + treatment | agem + poverty + dadind + sexk + sex2nd + 
+    twins2, data = try2)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-1532.2  -701.3  -261.9   656.0  5242.3 
+
+Coefficients:
+             Estimate Std. Error  t value Pr(>|t|)    
+(Intercept)   26.2577    10.4080    2.523  0.01164 *  
+agem          20.6828     0.6248   33.105  < 2e-16 ***
+poverty      110.0339     1.4056   78.282  < 2e-16 ***
+dadind      -614.2012     4.5607 -134.673  < 2e-16 ***
+sexk           4.8072     2.3571    2.039  0.04141 *  
+sex2nd         6.9819     2.3572    2.962  0.00306 ** 
+treatment    -92.0875    20.3825   -4.518 6.24e-06 ***
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 479347  7723.522  <2e-16 ***
+Wu-Hausman            1 479346     0.256   0.613    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 814.2 on 479347 degrees of freedom
+Multiple R-Squared: 0.09651,	Adjusted R-squared: 0.0965 
+Wald test:  8275 on 6 and 479347 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = faminc ~ aged + agem + poverty + sexk + sex2nd + 
+    treatment | aged + agem + poverty + sexk + sex2nd + twins2, 
+    data = try2)
+
+Residuals:
+   Min     1Q Median     3Q    Max 
+-16826  -5595  -1905   2677  54490 
+
+Coefficients:
+              Estimate Std. Error  t value Pr(>|t|)    
+(Intercept) -18635.371    124.169 -150.080  < 2e-16 ***
+aged           126.730      3.929   32.256  < 2e-16 ***
+agem           373.171      7.734   48.252  < 2e-16 ***
+poverty       4141.857     16.904  245.017  < 2e-16 ***
+sexk            78.116     28.871    2.706  0.00682 ** 
+sex2nd          27.801     28.862    0.963  0.33542    
+treatment     1646.256    248.520    6.624 3.49e-11 ***
+
+Diagnostic tests:
+                    df1    df2 statistic  p-value    
+Weak instruments      1 406258   6598.54  < 2e-16 ***
+Wu-Hausman            1 406257     15.63 7.71e-05 ***
+Sargan                0     NA        NA       NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 9176 on 406258 degrees of freedom
+Multiple R-Squared: 0.4272,	Adjusted R-squared: 0.4272 
+Wald test: 5.058e+04 on 6 and 406258 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = participated ~ aged + agem + poverty + sexk + 
+    sex2nd + treatment | aged + agem + poverty + sexk + sex2nd + 
+    twins2, data = try2)
+
+Residuals:
+      Min        1Q    Median        3Q       Max 
+-1.050773 -0.003999  0.006954  0.032751  0.282414 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  8.918e-01  2.076e-03 429.616  < 2e-16 ***
+aged        -3.277e-03  6.568e-05 -49.898  < 2e-16 ***
+agem         1.155e-03  1.293e-04   8.931  < 2e-16 ***
+poverty      2.510e-02  2.826e-04  88.802  < 2e-16 ***
+sexk         1.090e-04  4.827e-04   0.226  0.82128    
+sex2nd      -1.389e-03  4.825e-04  -2.880  0.00398 ** 
+treatment    1.304e-02  4.155e-03   3.137  0.00170 ** 
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 406258  6598.541  <2e-16 ***
+Wu-Hausman            1 406257     2.401   0.121    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 0.1534 on 406258 degrees of freedom
+Multiple R-Squared: 0.08019,	Adjusted R-squared: 0.08017 
+Wald test:  5902 on 6 and 406258 DF,  p-value: < 2.2e-16 
+
+
+Call:
+ivreg(formula = hrstotald ~ aged + agem + poverty + sexk + sex2nd + 
+    treatment | aged + agem + poverty + sexk + sex2nd + twins2, 
+    data = try2)
+
+Residuals:
+     Min       1Q   Median       3Q      Max 
+-2371.75  -193.92   -99.82   320.10  3856.60 
+
+Coefficients:
+             Estimate Std. Error t value Pr(>|t|)    
+(Intercept) 1305.4146     9.2527 141.085   <2e-16 ***
+aged          -8.6467     0.2928 -29.535   <2e-16 ***
+agem          11.8648     0.5763  20.588   <2e-16 ***
+poverty      120.5011     1.2597  95.662   <2e-16 ***
+sexk           4.9243     2.1514   2.289   0.0221 *  
+sex2nd        -0.6554     2.1507  -0.305   0.7606    
+treatment     25.2415    18.5188   1.363   0.1729    
+
+Diagnostic tests:
+                    df1    df2 statistic p-value    
+Weak instruments      1 406258  6598.541  <2e-16 ***
+Wu-Hausman            1 406257     1.008   0.315    
+Sargan                0     NA        NA      NA    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 683.8 on 406258 degrees of freedom
+Multiple R-Squared: 0.09603,	Adjusted R-squared: 0.09602 
+Wald test:  7146 on 6 and 406258 DF,  p-value: < 2.2e-16 
+
+
+
